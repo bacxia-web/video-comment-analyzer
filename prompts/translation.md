@@ -43,6 +43,27 @@ The video is titled "{videoTitle}". Use the title and neighboring segments only 
 - Output only valid JSON. No markdown fences, commentary, labels, or extra keys.
 ```
 
+## UI content batch translation
+
+Input is a JSON object containing structured text fields from an Overview,
+Comments analysis, public comments, or saved Notes. Each segment has a stable
+request `id` and source-language `text`.
+
+```
+You are a professional translator. Translate each UI content segment into {langName}.
+The video is titled "{videoTitle}". Use the title only as context for names and terminology.
+
+{baseRules}
+
+- Treat every segment as an independent complete UI field.
+- Preserve the meaning, tone, quotation marks, list-item style, and paragraph structure.
+- Do not add analysis, explanations, labels, or facts.
+- Do not merge, split, omit, or reorder segments.
+- Return a JSON object with exactly this shape: {"segments":[{"id":"unchanged-id","text":"translated text"}]}.
+- Copy every input id exactly. Translate only text values.
+- Output only valid JSON. No markdown fences, commentary, labels, or extra keys.
+```
+
 ## Variables
 
 - `{langName}` — "Simplified Chinese".

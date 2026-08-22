@@ -1684,6 +1684,33 @@ function validateTranscriptBatchRequest(content) {
   return normalized;
 }
 
+function validateUiBatchRequest(content) {
+  const segments = content?.segments;
+  if (!Array.isArray(segments) || segments.length < 1 || segments.length > 16) {
+    throw new Error("UI translation requires 1 to 16 segments");
+  }
+
+  const seenIds = new Set();
+  let totalCharacters = 0;
+  const normalized = segments.map((segment) => {
+    const id = typeof segment?.id === "string" ? segment.id.trim() : "";
+    const text = typeof segment?.text === "string" ? segment.text.trim() : "";
+    if (!/^[A-Za-z0-9:_-]{1,128}$/.test(id) || seenIds.has(id)) {
+      throw new Error("UI translation segment IDs must be unique and stable");
+    }
+    if (!text || text.length > 10000) {
+      throw new Error("UI translation segment text is invalid or too long");
+    }
+    seenIds.add(id);
+    totalCharacters += text.length;
+    return { id, text };
+  });
+  if (totalCharacters > 24000) {
+    throw new Error("UI translation batch is too large");
+  }
+  return normalized;
+}
+
 function looksLikeChineseTranslation(text, sourceText) {
   const latinLetters = (sourceText.match(/[A-Za-z]/g) || []).length;
   if (latinLetters < 20) return true;
@@ -1728,8 +1755,8 @@ function normalizeTranslatedSegmentBatch(parsed, sourceSegments) {
 
 /**
  * Translates content using DeepSeek.
- * @param {Object} content - JSON object containing semantic transcript segments
- * @param {string} contentType - Must be 'transcriptBatch'
+ * @param {Object} content - JSON object containing structured text segments
+ * @param {string} contentType - 'transcriptBatch' or 'uiBatch'
  * @param {string} targetLanguage - 'zh' for Simplified Chinese
  * @param {string} videoTitle - The video title (for context)
  * @returns {Object} - { success, translatedContent } or { success: false, error }
@@ -1747,7 +1774,7 @@ async function handleTranslateContent(
         error: `Unsupported translation target: ${String(targetLanguage)}`,
       };
     }
-    if (contentType !== "transcriptBatch") {
+    if (!["transcriptBatch", "uiBatch"].includes(contentType)) {
       return {
         success: false,
         error: `Unsupported translation content type: ${String(contentType)}`,
@@ -1759,12 +1786,17 @@ async function handleTranslateContent(
       return { success: false, error: "DeepSeek API key not configured" };
     }
 
-    const sourceSegments = validateTranscriptBatchRequest(content);
+    const isTranscriptBatch = contentType === "transcriptBatch";
+    const sourceSegments = isTranscriptBatch
+      ? validateTranscriptBatchRequest(content)
+      : validateUiBatchRequest(content);
     const langName = "Simplified Chinese";
     const baseRules = await getTranslationBaseRules(targetLanguage);
     const systemPrompt = await loadPromptSection(
       "translation.md",
-      "Transcript batch translation",
+      isTranscriptBatch
+        ? "Transcript batch translation"
+        : "UI content batch translation",
       {
         langName,
         videoTitle: videoTitle || "Unknown",
@@ -1774,7 +1806,7 @@ async function handleTranslateContent(
     const userContent = JSON.stringify({ segments: sourceSegments });
     const translationOptions = {
       temperature: 0.2,
-      maxTokens: 1536,
+      maxTokens: isTranscriptBatch ? 1536 : 8192,
       responseFormat: { type: "json_object" },
     };
     let result = await callAiTranslation(
@@ -1850,6 +1882,7 @@ globalThis.__YTD_TRANSLATION_TESTING__ = {
   requestAiCompletion,
   callAiTranslation,
   validateTranscriptBatchRequest,
+  validateUiBatchRequest,
   normalizeTranslatedSegmentBatch,
   handleTranslateContent,
 };

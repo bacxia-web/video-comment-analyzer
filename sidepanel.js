@@ -36,15 +36,22 @@ let isCommentsLoading = false;
 let isCommentAnalysisLoading = false;
 let commentCacheCheckedVideoId = null;
 
-// --- Translation state ---
-// The public transcript control intentionally supports only the original
-// subtitles, Chinese, and an aligned source + Chinese view.
-let currentTranscriptMode = "original";
+// --- Global content language state ---
+// One control drives Transcript, Overview, Comments, and Notes.
+let currentLanguageMode = "original";
 let translationGeneration = 0; // Invalidates responses from older UI modes/videos.
 let translationWorkCount = 0;
 let transcriptScrollObserver = null;
 // Stable keys include the video, source mode, language, and semantic segment ID.
 let transcriptParagraphCache = new Map();
+const UI_TRANSLATION_STORAGE_KEY = "ytd_ui_translation_cache";
+const LANGUAGE_MODE_STORAGE_KEY = "ytd_global_language_mode";
+let uiTranslationCache = new Map();
+let uiTranslationErrors = new Map();
+let localizedContentNodes = new Map();
+let uiTranslationGeneration = 0;
+let uiTranslationScheduled = false;
+let isUiTranslationRunning = false;
 const TRANSLATION_MESSAGE_TIMEOUT_MS = 130_000;
 
 /**
@@ -237,6 +244,7 @@ function groupTranscriptEntries(entries, limits = TRANSCRIPT_SEGMENT_LIMITS) {
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
+  await loadGlobalLanguageState();
   setupEventListeners();
   await evictOldCacheEntries(20);
 
@@ -382,9 +390,9 @@ function setupEventListeners() {
   document
     .getElementById("exportTranscriptBtn")
     ?.addEventListener("click", exportTranscript);
-  document.querySelectorAll(".transcript-mode-btn").forEach((button) => {
+  document.querySelectorAll(".language-mode-btn").forEach((button) => {
     button.addEventListener("click", () => {
-      handleTranscriptModeChange(button.dataset.transcriptMode);
+      handleGlobalLanguageModeChange(button.dataset.languageMode);
     });
   });
 
@@ -548,6 +556,8 @@ async function startDigest(videoId, videoUrl) {
   // Every video change invalidates observer work and in-flight translations.
   if (videoId !== currentVideoId) {
     translationGeneration += 1;
+    uiTranslationGeneration += 1;
+    localizedContentNodes.clear();
     if (transcriptScrollObserver) transcriptScrollObserver.disconnect();
     transcriptScrollObserver = null;
     resetCommentState();
@@ -597,7 +607,7 @@ async function startDigest(videoId, videoUrl) {
 
     // Setup explain feature
     setupExplainFeature();
-    if (currentTranscriptMode !== "original") translateTranscript();
+    if (currentLanguageMode !== "original") translateTranscript();
     return;
   }
 
@@ -649,7 +659,7 @@ async function startDigest(videoId, videoUrl) {
 
   // Setup explain feature for text selection
   setupExplainFeature();
-  if (currentTranscriptMode !== "original") translateTranscript();
+  if (currentLanguageMode !== "original") translateTranscript();
 
   // Save transcript to cache (without analysis)
   await saveToCache(videoId);
@@ -670,7 +680,7 @@ function renderAnalysisResults(analysis) {
   // Chapters
   const chapterList = document.getElementById("chapterList");
   chapterList.innerHTML = "";
-  (analysis.chapters || []).forEach((chapter) => {
+  (analysis.chapters || []).forEach((chapter, index) => {
     const li = document.createElement("li");
     li.className = "chapter-item";
     li.dataset.seconds = chapter.timestampSeconds;
@@ -690,6 +700,16 @@ function renderAnalysisResults(analysis) {
       seekTo(chapter.timestampSeconds);
     });
     chapterList.appendChild(li);
+    registerLocalizedContent(
+      li.querySelector(".chapter-title"),
+      `overview:${currentVideoId}:chapter:${index}:title`,
+      chapter.title,
+    );
+    registerLocalizedContent(
+      li.querySelector(".chapter-summary"),
+      `overview:${currentVideoId}:chapter:${index}:summary`,
+      chapter.summary,
+    );
   });
 
   // Quotes - sort by timestamp (chronological order)
@@ -698,7 +718,7 @@ function renderAnalysisResults(analysis) {
   const sortedQuotes = [...(analysis.keyQuotes || [])].sort(
     (a, b) => (a.timestampSeconds || 0) - (b.timestampSeconds || 0),
   );
-  sortedQuotes.forEach((quote) => {
+  sortedQuotes.forEach((quote, index) => {
     const div = document.createElement("div");
     div.className = "quote-item";
     div.dataset.seconds = quote.timestampSeconds;
@@ -742,6 +762,11 @@ function renderAnalysisResults(analysis) {
     });
 
     quotesList.appendChild(div);
+    registerLocalizedContent(
+      div.querySelector(".quote-text"),
+      `overview:${currentVideoId}:quote:${index}`,
+      quote.quote,
+    );
   });
 }
 
@@ -1243,7 +1268,7 @@ function renderTopComments(comments) {
   if (!section || !container) return;
   container.replaceChildren();
   const safeComments = Array.isArray(comments) ? comments : [];
-  for (const comment of safeComments) {
+  safeComments.forEach((comment, index) => {
     const card = document.createElement("div");
     card.className = "top-comment";
     const meta = document.createElement("div");
@@ -1258,7 +1283,12 @@ function renderTopComments(comments) {
     text.textContent = comment.text || "";
     card.append(meta, text);
     container.appendChild(card);
-  }
+    registerLocalizedContent(
+      text,
+      `comments:${currentVideoId}:top:${comment.id || index}`,
+      comment.text,
+    );
+  });
   section.hidden = safeComments.length === 0;
 }
 
@@ -1268,12 +1298,17 @@ function renderCommentAnalysis(analysis) {
   const sentiment = document.getElementById("commentSentiment");
   sentiment.className = `sentiment-badge ${analysis.overallSentiment || "neutral"}`;
   sentiment.textContent = analysis.overallSentiment || "neutral";
-  document.getElementById("commentSummary").textContent =
-    analysis.summary || "No summary returned.";
+  const commentSummary = document.getElementById("commentSummary");
+  commentSummary.textContent = analysis.summary || "No summary returned.";
+  registerLocalizedContent(
+    commentSummary,
+    `comments:${currentVideoId}:analysis:summary`,
+    analysis.summary || "No summary returned.",
+  );
 
   const topics = document.getElementById("commentTopics");
   topics.replaceChildren();
-  for (const topic of analysis.topics || []) {
+  (analysis.topics || []).forEach((topic, topicIndex) => {
     const card = document.createElement("div");
     card.className = "comment-topic";
     const header = document.createElement("div");
@@ -1289,42 +1324,62 @@ function renderCommentAnalysis(analysis) {
     summary.className = "comment-topic-summary";
     summary.textContent = topic.summary || "";
     card.append(header, summary);
-    for (const evidence of topic.evidence || []) {
+    registerLocalizedContent(
+      title,
+      `comments:${currentVideoId}:topic:${topicIndex}:title`,
+      topic.title,
+    );
+    registerLocalizedContent(
+      summary,
+      `comments:${currentVideoId}:topic:${topicIndex}:summary`,
+      topic.summary,
+    );
+    (topic.evidence || []).forEach((evidence, evidenceIndex) => {
       const quote = document.createElement("div");
       quote.className = "comment-evidence";
-      quote.textContent = evidence.text;
+      const quoteText = document.createElement("span");
+      quoteText.className = "comment-evidence-text";
+      quoteText.textContent = evidence.text;
       const meta = document.createElement("div");
       meta.className = "comment-evidence-meta";
       meta.textContent = `${evidence.author || "YouTube viewer"} · ${Number(evidence.likeCount) || 0} likes`;
-      quote.appendChild(meta);
+      quote.append(quoteText, meta);
       card.appendChild(quote);
-    }
+      registerLocalizedContent(
+        quoteText,
+        `comments:${currentVideoId}:topic:${topicIndex}:evidence:${evidence.id || evidenceIndex}`,
+        evidence.text,
+      );
+    });
     topics.appendChild(card);
-  }
+  });
   renderCommentInsightList(
     "viewerQuestionsSection",
     "viewerQuestions",
     analysis.viewerQuestions,
+    `comments:${currentVideoId}:questions`,
   );
   renderCommentInsightList(
     "creatorFeedbackSection",
     "creatorFeedback",
     analysis.creatorFeedback,
+    `comments:${currentVideoId}:feedback`,
   );
   wrapper.hidden = false;
 }
 
-function renderCommentInsightList(sectionId, listId, values) {
+function renderCommentInsightList(sectionId, listId, values, translationId) {
   const section = document.getElementById(sectionId);
   const list = document.getElementById(listId);
   if (!section || !list) return;
   list.replaceChildren();
   const safeValues = Array.isArray(values) ? values : [];
-  for (const value of safeValues) {
+  safeValues.forEach((value, index) => {
     const item = document.createElement("li");
     item.textContent = value;
     list.appendChild(item);
-  }
+    registerLocalizedContent(item, `${translationId}:${index}`, value);
+  });
   section.hidden = safeValues.length === 0;
 }
 
@@ -1824,7 +1879,7 @@ function renderNotes(notes, filteredVideoId) {
 
   notesIntro.style.display = "none";
 
-  notes.forEach((note) => {
+  notes.forEach((note, index) => {
     const noteEl = document.createElement("div");
     noteEl.className = "note-item";
     noteEl.innerHTML = `
@@ -1840,6 +1895,20 @@ function renderNotes(notes, filteredVideoId) {
         <button class="note-action-btn note-play" data-seconds="${Number(note.timestampSeconds) || 0}">▶ Play</button>
       </div>
     `;
+
+    const noteTranslationId = `notes:${note.videoId || currentVideoId || "all"}:${note.id || index}`;
+    registerLocalizedContent(
+      noteEl.querySelector(".note-text"),
+      `${noteTranslationId}:text`,
+      `"${note.text}"`,
+    );
+    if (!filteredVideoId) {
+      registerLocalizedContent(
+        noteEl.querySelector(".note-video-title"),
+        `${noteTranslationId}:title`,
+        note.videoTitle,
+      );
+    }
 
     // Timestamp click - play from this point (in this tab or a new one)
     noteEl.querySelector(".note-timestamp").addEventListener("click", () => {
@@ -2060,8 +2129,277 @@ function onContentAreaScroll() {
 }
 
 // ============================================================
-// TRANSCRIPT MODE UI — Original / Chinese / aligned bilingual
+// GLOBAL CONTENT LANGUAGE — Original / Chinese / bilingual
 // ============================================================
+
+async function loadGlobalLanguageState() {
+  try {
+    const stored = await chrome.storage.local.get([
+      LANGUAGE_MODE_STORAGE_KEY,
+      UI_TRANSLATION_STORAGE_KEY,
+    ]);
+    const savedMode = stored[LANGUAGE_MODE_STORAGE_KEY];
+    if (["original", "zh", "bilingual"].includes(savedMode)) {
+      currentLanguageMode = savedMode;
+    }
+    const savedTranslations = stored[UI_TRANSLATION_STORAGE_KEY];
+    if (savedTranslations && typeof savedTranslations === "object") {
+      uiTranslationCache = new Map(
+        Object.entries(savedTranslations).filter(
+          ([key, value]) => key && typeof value === "string" && value.trim(),
+        ),
+      );
+    }
+  } catch (error) {
+    console.warn("[YouTube Panorama] Could not load language preferences:", error);
+  }
+  setGlobalLanguageModeButtons(currentLanguageMode);
+}
+
+function setGlobalLanguageModeButtons(mode) {
+  document.querySelectorAll(".language-mode-btn").forEach((button) => {
+    const active = button.dataset.languageMode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+async function handleGlobalLanguageModeChange(mode) {
+  if (!["original", "zh", "bilingual"].includes(mode)) return;
+  const isRetry = mode === currentLanguageMode && mode !== "original";
+  if (mode === currentLanguageMode && !isRetry) return;
+
+  currentLanguageMode = mode;
+  translationGeneration += 1;
+  uiTranslationGeneration += 1;
+  uiTranslationErrors.clear();
+  translationWorkCount = 0;
+  setTranslatingSpinner(false);
+  if (transcriptScrollObserver) transcriptScrollObserver.disconnect();
+  transcriptScrollObserver = null;
+  setGlobalLanguageModeButtons(mode);
+  chrome.storage.local
+    .set({ [LANGUAGE_MODE_STORAGE_KEY]: mode })
+    .catch((error) =>
+      console.warn("[YouTube Panorama] Could not save language preference:", error),
+    );
+
+  renderAllLocalizedContent();
+  if (mode === "original") {
+    if (currentTranscript) renderTranscript();
+    return;
+  }
+
+  scheduleUiTranslation();
+  if (currentTranscript) await translateTranscript();
+}
+
+function stableTextHash(text) {
+  let hash = 2166136261;
+  for (const character of String(text || "")) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function uiTranslationCacheKey(id, original) {
+  return `${id}:zh:${stableTextHash(original)}`;
+}
+
+function registerLocalizedContent(element, id, original) {
+  const text = String(original || "").trim();
+  if (!element || !id || !text) return;
+  const record = {
+    id,
+    element,
+    original: text,
+    cacheKey: uiTranslationCacheKey(id, text),
+  };
+  localizedContentNodes.set(id, record);
+  renderLocalizedContentNode(record);
+  if (currentLanguageMode !== "original") scheduleUiTranslation();
+}
+
+function renderLocalizedContentNode(record) {
+  if (!record.element) return;
+  const translated = uiTranslationCache.get(record.cacheKey) || "";
+  const error = uiTranslationErrors.get(record.cacheKey) || "";
+  const element = record.element;
+  element.classList.add("global-localized-content");
+  element.dataset.languageMode = currentLanguageMode;
+
+  if (currentLanguageMode === "original") {
+    element.textContent = record.original;
+    element.classList.remove("global-translation-status");
+    return;
+  }
+
+  const translationText = translated || error || "翻译中…";
+  if (currentLanguageMode === "zh") {
+    element.textContent = translationText;
+    element.classList.toggle("global-translation-status", !translated);
+    return;
+  }
+
+  element.classList.remove("global-translation-status");
+  element.replaceChildren();
+  const original = document.createElement("span");
+  original.className = "global-translation-original";
+  original.textContent = record.original;
+  const translation = document.createElement("span");
+  translation.className = `global-translation-zh${translated ? "" : " global-translation-status"}`;
+  translation.textContent = translationText;
+  element.append(original, translation);
+}
+
+function renderAllLocalizedContent() {
+  for (const [id, record] of localizedContentNodes) {
+    if (!record.element?.isConnected) {
+      localizedContentNodes.delete(id);
+      continue;
+    }
+    renderLocalizedContentNode(record);
+  }
+}
+
+function getPendingUiTranslations() {
+  const pendingByCacheKey = new Map();
+  for (const record of localizedContentNodes.values()) {
+    if (
+      record.element?.isConnected &&
+      !uiTranslationCache.has(record.cacheKey) &&
+      !uiTranslationErrors.has(record.cacheKey)
+    ) {
+      pendingByCacheKey.set(record.cacheKey, record);
+    }
+  }
+  return [...pendingByCacheKey.values()];
+}
+
+function createUiTranslationBatches(records) {
+  const batches = [];
+  let batch = [];
+  let characterCount = 0;
+  for (const record of records) {
+    const length = record.original.length;
+    if (batch.length && (batch.length >= 16 || characterCount + length > 22000)) {
+      batches.push(batch);
+      batch = [];
+      characterCount = 0;
+    }
+    batch.push(record);
+    characterCount += length;
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
+async function persistUiTranslationCache() {
+  const allEntries = [...uiTranslationCache.entries()];
+  const recentEntries = [];
+  let storedCharacters = 0;
+  for (let index = allEntries.length - 1; index >= 0; index -= 1) {
+    const entry = allEntries[index];
+    const entryCharacters = entry[0].length + entry[1].length;
+    if (
+      recentEntries.length >= 400 ||
+      storedCharacters + entryCharacters > 1_500_000
+    ) {
+      break;
+    }
+    recentEntries.unshift(entry);
+    storedCharacters += entryCharacters;
+  }
+  uiTranslationCache = new Map(recentEntries);
+  try {
+    await chrome.storage.local.set({
+      [UI_TRANSLATION_STORAGE_KEY]: Object.fromEntries(recentEntries),
+    });
+  } catch (error) {
+    console.warn("[YouTube Panorama] Could not save UI translations:", error);
+  }
+}
+
+function scheduleUiTranslation() {
+  if (
+    currentLanguageMode === "original" ||
+    uiTranslationScheduled ||
+    isUiTranslationRunning
+  ) {
+    return;
+  }
+  uiTranslationScheduled = true;
+  setTimeout(() => {
+    uiTranslationScheduled = false;
+    translatePendingUiContent();
+  }, 20);
+}
+
+async function translatePendingUiContent() {
+  if (currentLanguageMode === "original" || isUiTranslationRunning) return;
+  const pending = getPendingUiTranslations();
+  if (!pending.length) return;
+
+  isUiTranslationRunning = true;
+  const generation = uiTranslationGeneration;
+  const videoId = currentVideoId;
+  setTranslatingSpinner(true);
+  try {
+    for (const batch of createUiTranslationBatches(pending)) {
+      if (
+        generation !== uiTranslationGeneration ||
+        videoId !== currentVideoId ||
+        currentLanguageMode === "original"
+      ) {
+        return;
+      }
+      const requestSegments = batch.map((record, index) => ({
+        id: `ui-${index}`,
+        text: record.original,
+      }));
+      let result;
+      try {
+        result = await sendTranslationMessage({
+          action: "translateContent",
+          content: { segments: requestSegments },
+          contentType: "uiBatch",
+          targetLanguage: "zh",
+          videoTitle: currentVideoTitle,
+        });
+      } catch (error) {
+        result = { success: false, error: error.message || "翻译失败" };
+      }
+      if (generation !== uiTranslationGeneration || videoId !== currentVideoId) {
+        return;
+      }
+      const aligned = alignTranslatedSegmentBatch(
+        requestSegments,
+        result?.success ? result.translatedContent?.segments : [],
+      );
+      aligned.forEach((item, index) => {
+        const cacheKey = batch[index].cacheKey;
+        if (item.text) {
+          uiTranslationCache.set(cacheKey, item.text);
+          uiTranslationErrors.delete(cacheKey);
+        } else {
+          uiTranslationErrors.set(
+            cacheKey,
+            result?.error || item.error || "翻译失败，再次点击当前语言可重试。",
+          );
+        }
+      });
+      renderAllLocalizedContent();
+    }
+    await persistUiTranslationCache();
+  } finally {
+    isUiTranslationRunning = false;
+    setTranslatingSpinner(false);
+    if (currentLanguageMode !== "original" && getPendingUiTranslations().length) {
+      scheduleUiTranslation();
+    }
+  }
+}
 
 function getOriginalTranscriptLabel() {
   const language = String(currentTranscriptLanguage || "").trim();
@@ -2076,34 +2414,6 @@ function getActiveTranscriptSegments() {
 
 function transcriptTranslationCacheKey(segment) {
   return `${currentVideoId}:zh:semantic:${segment.id}`;
-}
-
-function setTranscriptModeButtons(mode) {
-  document.querySelectorAll(".transcript-mode-btn").forEach((button) => {
-    const active = button.dataset.transcriptMode === mode;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-}
-
-async function handleTranscriptModeChange(mode) {
-  if (!["original", "zh", "bilingual"].includes(mode)) return;
-  if (mode === currentTranscriptMode) return;
-
-  currentTranscriptMode = mode;
-  translationGeneration += 1;
-  translationWorkCount = 0;
-  setTranslatingSpinner(false);
-  if (transcriptScrollObserver) transcriptScrollObserver.disconnect();
-  transcriptScrollObserver = null;
-  setTranscriptModeButtons(mode);
-
-  if (mode === "original") {
-    renderTranscript();
-    return;
-  }
-
-  await translateTranscript();
 }
 
 function renderTranscriptSegmentContent(segment, mode, translated, error) {
@@ -2213,7 +2523,7 @@ function updateTranslatedRow(segment, index, alignedItem, generation) {
   if (copy) {
     copy.outerHTML = renderTranscriptSegmentContent(
       segment,
-      currentTranscriptMode,
+      currentLanguageMode,
       alignedItem.text,
       alignedItem.error,
     );
@@ -2263,7 +2573,7 @@ async function requestTranscriptTranslationBatch(
     const isStale =
       generation !== translationGeneration ||
       videoId !== currentVideoId ||
-      mode !== currentTranscriptMode;
+      mode !== currentLanguageMode;
     if (isStale) return;
 
     const responseSegments = result?.success
@@ -2320,12 +2630,12 @@ function retryTranslationSegment(index, generation) {
  */
 async function translateTranscript() {
   const segments = getActiveTranscriptSegments();
-  if (!segments.length || currentTranscriptMode === "original") return;
+  if (!segments.length || currentLanguageMode === "original") return;
 
   translationGeneration += 1;
   const generation = translationGeneration;
   const videoId = currentVideoId;
-  const mode = currentTranscriptMode;
+  const mode = currentLanguageMode;
   if (transcriptScrollObserver) transcriptScrollObserver.disconnect();
 
   const rows = renderTranscriptModeRows(segments, mode);
@@ -2406,6 +2716,9 @@ globalThis.__YTD_TRANSCRIPT_TESTING__ = {
   groupTranscriptEntries,
   splitOversizedThought,
   alignTranslatedSegmentBatch,
+  stableTextHash,
+  uiTranslationCacheKey,
+  createUiTranslationBatches,
   renderSubtitleInlineMarkup,
   renderTranscriptSegmentContent,
 };

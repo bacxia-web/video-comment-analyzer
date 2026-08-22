@@ -5,7 +5,7 @@
 Turn every YouTube video into a resource for deep learning. YouTube Panorama brings transcripts, public comment research, bilingual translation, AI overviews, explanations, and timestamped notes into one Chrome side panel, so you can study both the video and its audience response without losing your place.
 
 - Turn captions into a readable, searchable learning resource.
-- Learn languages with the original transcript, a Simplified Chinese translation, or an aligned bilingual view.
+- Switch the whole learning view between Original, Simplified Chinese, and bilingual mode. The choice applies to transcripts, overviews, comment content and analysis, and saved notes.
 - Build understanding with an AI overview, chapters, key quotes, and selected-text explanations.
 - Fetch public YouTube comments and replies, inspect deterministic audience statistics, and analyze discussion topics, sentiment, recurring questions, and creator takeaways.
 - Navigate long videos by clicking timestamps in the transcript, overview, or notes.
@@ -116,7 +116,7 @@ Keys and settings are stored in Chrome's local extension storage on your device.
 - Google Chrome 116 or newer, using the Side Panel API.
 - Standard `youtube.com/watch` video pages.
 - Native subtitle tracks returned by Supadata. YouTube Panorama prefers English when available, but may show another native language.
-- Original, Simplified Chinese, and aligned bilingual transcript views.
+- A top-right Original, Simplified Chinese, and bilingual switch shared by transcripts, overviews, comments, and notes.
 - Public top-level comments and replies fetched through YouTube Data API v3, capped at 1,000 items per video.
 - Deterministic comment statistics, high-like comment browsing, and explicit on-demand AI analysis of up to 400 sampled comments.
 - Comment topic clustering, overall sentiment, recurring viewer questions, creator takeaways, and source-verified evidence comments.
@@ -183,8 +183,8 @@ YouTube Panorama makes provider requests directly from the extension:
 1. It sends a canonical YouTube watch URL to Supadata to request the native transcript.
 2. It sends the video ID to Google YouTube Data API v3 when you explicitly fetch public comments and replies.
 3. It sends the transcript and relevant video metadata, or a sample of fetched comments, to DeepSeek when you request the corresponding AI feature.
-4. Focused features send only the content they need, such as selected text with context or small transcript batches for translation.
-5. It stores keys, settings, notes, and recent digest and comment-analysis cache entries locally in Chrome.
+4. Focused features send only the content they need, such as selected text with context, small transcript batches, or visible overview, comment, and note fields requested in Chinese or bilingual mode.
+5. It stores keys, settings, notes, and recent digest, comment-analysis, and translation cache entries locally in Chrome.
 
 There is no YouTube Panorama account system, advertising, analytics, or telemetry. Google, Supadata, and DeepSeek still receive data under their own terms and privacy policies. See [PRIVACY.md](PRIVACY.md) for details.
 

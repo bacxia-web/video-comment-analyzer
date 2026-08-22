@@ -20,7 +20,7 @@ test("manifest uses minimized install-time permissions", () => {
     manifest.host_permissions.includes("https://www.googleapis.com/*"),
   );
   assert.equal(Object.hasOwn(manifest, "optional_host_permissions"), false);
-  assert.equal(manifest.version, "1.2.1");
+  assert.equal(manifest.version, "1.3.0");
 });
 
 test("release copy documents current scope without em dashes", () => {
@@ -258,6 +258,7 @@ test("published prompt files contain runtime sections", () => {
       "Shared base rules",
       "Chinese rules",
       "Transcript batch translation",
+      "UI content batch translation",
     ],
   };
 

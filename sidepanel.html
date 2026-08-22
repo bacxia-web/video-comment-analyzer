@@ -17,15 +17,47 @@
           <div class="video-title" id="videoTitle"></div>
           <div class="video-channel" id="videoChannel"></div>
         </div>
-        <button
-          class="settings-btn"
-          id="settingsBtn"
-          type="button"
-          title="Open YouTube Panorama settings"
-          aria-label="Open YouTube Panorama settings"
-        >
-          Settings
-        </button>
+        <div class="header-actions">
+          <div
+            class="language-mode-control"
+            id="languageModeControl"
+            role="group"
+            aria-label="Content language"
+          >
+            <button
+              class="language-mode-btn active"
+              type="button"
+              data-language-mode="original"
+              aria-pressed="true"
+            >Original</button>
+            <button
+              class="language-mode-btn"
+              type="button"
+              data-language-mode="zh"
+              aria-pressed="false"
+            >中文</button>
+            <button
+              class="language-mode-btn"
+              type="button"
+              data-language-mode="bilingual"
+              aria-pressed="false"
+            >双语</button>
+            <span
+              class="translation-spinner"
+              id="langSpinner"
+              aria-label="Translating"
+            ></span>
+          </div>
+          <button
+            class="settings-btn"
+            id="settingsBtn"
+            type="button"
+            title="Open YouTube Panorama settings"
+            aria-label="Open YouTube Panorama settings"
+          >
+            Settings
+          </button>
+        </div>
       </div>
 
       <!-- Tab navigation -->
@@ -78,40 +110,8 @@
         <div class="tab-panel active" data-panel="transcript">
           <div class="section">
             <div class="section-header transcript-section-header">
-              <div class="transcript-header-main">
-                <div class="section-title-wrap">
-                  <div class="section-title">Full Transcript</div>
-                </div>
-                <div
-                  class="transcript-mode-control"
-                  id="transcriptModeControl"
-                  role="group"
-                  aria-label="Transcript language"
-                >
-                  <button
-                    class="transcript-mode-btn active"
-                    type="button"
-                    data-transcript-mode="original"
-                    aria-pressed="true"
-                  >Original</button>
-                  <button
-                    class="transcript-mode-btn"
-                    type="button"
-                    data-transcript-mode="zh"
-                    aria-pressed="false"
-                  >中文</button>
-                  <button
-                    class="transcript-mode-btn"
-                    type="button"
-                    data-transcript-mode="bilingual"
-                    aria-pressed="false"
-                  >双语</button>
-                  <span
-                    class="translation-spinner"
-                    id="langSpinner"
-                    aria-label="Translating"
-                  ></span>
-                </div>
+              <div class="section-title-wrap">
+                <div class="section-title">Full Transcript</div>
               </div>
               <div class="transcript-actions">
                 <button class="enhance-btn" id="copyTranscriptBtn">Copy</button>

@@ -165,16 +165,41 @@ function streamingResponse(chunks, { ok = true, status = 200 } = {}) {
 const encode = (value) => new TextEncoder().encode(value);
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
-test("Transcript header exposes and wires Original, Chinese, and bilingual modes", () => {
+test("top-right global control wires Original, Chinese, and bilingual modes", () => {
   const html = read("sidepanel.html");
   const js = read("sidepanel.js");
-  assert.match(html, /data-transcript-mode="original"[\s\S]*?>Original</);
-  assert.match(html, /data-transcript-mode="zh"[\s\S]*?>\u4e2d\u6587</);
-  assert.match(html, /data-transcript-mode="bilingual"[\s\S]*?>\u53cc\u8bed</);
-  assert.match(js, /handleTranscriptModeChange\(button\.dataset\.transcriptMode\)/);
+  assert.match(html, /header-actions[\s\S]*language-mode-control[\s\S]*settingsBtn/);
+  assert.match(html, /data-language-mode="original"[\s\S]*?>Original</);
+  assert.match(html, /data-language-mode="zh"[\s\S]*?>\u4e2d\u6587</);
+  assert.match(html, /data-language-mode="bilingual"[\s\S]*?>\u53cc\u8bed</);
+  assert.match(js, /handleGlobalLanguageModeChange\(button\.dataset\.languageMode\)/);
   assert.match(js, /contentType: "transcriptBatch"/);
+  assert.match(js, /contentType: "uiBatch"/);
+  assert.match(js, /registerLocalizedContent\([\s\S]*overview:/);
+  assert.match(js, /registerLocalizedContent\([\s\S]*comments:/);
+  assert.match(js, /registerLocalizedContent\([\s\S]*notes:/);
   assert.doesNotMatch(js, /English \+ Chinese/);
   assert.match(js, /Original \(\$\{language\}\)/);
+});
+
+test("UI translation cache keys change when the source content changes", () => {
+  const { uiTranslationCacheKey, createUiTranslationBatches } =
+    loadSidepanelHelpers();
+  assert.notEqual(
+    uiTranslationCacheKey("overview:video:chapter:0", "First title"),
+    uiTranslationCacheKey("overview:video:chapter:0", "Updated title"),
+  );
+  const records = Array.from({ length: 17 }, (_, index) => ({
+    original: `content ${index}`,
+  }));
+  assert.deepEqual(
+    JSON.parse(
+      JSON.stringify(
+        createUiTranslationBatches(records).map((batch) => batch.length),
+      ),
+    ),
+    [16, 1],
+  );
 });
 
 test("semantic segmentation rebuilds sentences across caption boundaries", () => {
@@ -311,7 +336,8 @@ test("subtitle markup renderer keeps attributed and arbitrary HTML escaped", () 
 
 test("background rejects unsupported language fallthrough and malformed batches", () => {
   const source = read("background.js");
-  const { validateTranscriptBatchRequest } = loadBackgroundHelpers();
+  const { validateTranscriptBatchRequest, validateUiBatchRequest } =
+    loadBackgroundHelpers();
   assert.match(source, /targetLanguage !== "zh"/);
   assert.throws(
     () => validateTranscriptBatchRequest({ segments: [] }),
@@ -326,6 +352,32 @@ test("background rejects unsupported language fallthrough and malformed batches"
         ],
       }),
     /unique and stable/,
+  );
+  assert.deepEqual(
+    JSON.parse(
+      JSON.stringify(
+        validateUiBatchRequest({
+          segments: [
+            { id: "ui-0", text: "Overview title" },
+            { id: "ui-1", text: "Audience comment" },
+          ],
+        }),
+      ),
+    ),
+    [
+      { id: "ui-0", text: "Overview title" },
+      { id: "ui-1", text: "Audience comment" },
+    ],
+  );
+  assert.throws(
+    () =>
+      validateUiBatchRequest({
+        segments: Array.from({ length: 17 }, (_, index) => ({
+          id: `ui-${index}`,
+          text: "content",
+        })),
+      }),
+    /1 to 16 segments/,
   );
 });
 
@@ -529,6 +581,39 @@ test("DeepSeek retries one empty transcript JSON response without response_forma
   assert.deepEqual(requests[0].response_format, { type: "json_object" });
   assert.equal(Object.hasOwn(requests[1], "response_format"), false);
   assert.equal(requests[0].max_tokens, 1536);
+});
+
+test("UI content translation uses its structured prompt and larger response budget", async () => {
+  const requests = [];
+  const helpers = loadBackgroundHelpers({
+    fetchImpl: async (url, options) => {
+      if (url.startsWith("chrome-extension://")) {
+        return { ok: true, text: async () => read("prompts/translation.md") };
+      }
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content:
+                '{"segments":[{"id":"ui-0","text":"\u4e2d\u6587\u6982\u89c8"}]}'
+            },
+          }],
+        }),
+      };
+    },
+  });
+  const result = await helpers.handleTranslateContent(
+    { segments: [{ id: "ui-0", text: "English overview" }] },
+    "uiBatch",
+    "zh",
+    "Video",
+  );
+  assert.equal(result.success, true);
+  assert.equal(requests[0].max_tokens, 8192);
+  assert.match(requests[0].messages[0].content, /independent complete UI field/);
+  assert.equal(result.translatedContent.segments[0].text, "\u4e2d\u6587\u6982\u89c8");
 });
 
 test("translation message watchdog rejects, clears its timer, and ignores late replies", async () => {

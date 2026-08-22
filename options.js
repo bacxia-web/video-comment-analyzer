@@ -55,7 +55,7 @@ const YTD_OPTIONS = (() => {
       localData: "Local data",
       localDataHelp:
         "Digests, comment analyses, translations, and notes are stored only in this Chrome profile. You can remove them at any time.",
-      clearCache: "Clear cached digests and comments",
+      clearCache: "Clear cached digests, comments, and translations",
       deleteNotes: "Delete all notes",
       resetData: "Reset extension data",
       footer:
@@ -127,7 +127,7 @@ const YTD_OPTIONS = (() => {
       localData: "本地数据",
       localDataHelp:
         "摘要、评论分析、翻译和笔记仅保存在当前 Chrome 个人资料中。你可以随时删除。",
-      clearCache: "清除缓存的摘要和评论",
+      clearCache: "清除缓存的摘要、评论和翻译",
       deleteNotes: "删除全部笔记",
       resetData: "重置扩展数据",
       footer:
@@ -484,7 +484,10 @@ const YTD_OPTIONS = (() => {
     async function clearCachedDigests() {
       const all = await storage.get(null);
       const keys = Object.keys(all).filter(
-        (key) => key.startsWith("digest_") || key.startsWith("comments_"),
+        (key) =>
+          key.startsWith("digest_") ||
+          key.startsWith("comments_") ||
+          key === "ytd_ui_translation_cache",
       );
       if (keys.length) await storage.remove(keys);
       setStatus(dataStatus, "clearedDigests", { count: keys.length });
