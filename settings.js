@@ -12,6 +12,7 @@ var YTD_SETTINGS = (() => {
     aiBaseUrl: "https://api.deepseek.com",
     aiModel: "deepseek-v4-flash",
     supadataApiKey: "",
+    youtubeApiKey: "",
   });
 
   function isLegacyCustom(input) {
@@ -31,6 +32,10 @@ var YTD_SETTINGS = (() => {
       supadataApiKey:
         typeof input.supadataApiKey === "string"
           ? input.supadataApiKey.trim()
+          : "",
+      youtubeApiKey:
+        typeof input.youtubeApiKey === "string"
+          ? input.youtubeApiKey.trim()
           : "",
     };
   }

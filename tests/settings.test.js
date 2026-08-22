@@ -10,6 +10,7 @@ test("DeepSeek defaults use V4 Flash", () => {
     aiBaseUrl: "https://api.example.com/v1",
     aiModel: "example-model",
     supadataApiKey: "  example-supadata  ",
+    youtubeApiKey: "  example-youtube  ",
   });
 
   assert.equal(normalized.provider, "deepseek");
@@ -17,6 +18,7 @@ test("DeepSeek defaults use V4 Flash", () => {
   assert.equal(normalized.aiModel, "deepseek-v4-flash");
   assert.equal(normalized.aiApiKey, "example-key");
   assert.equal(normalized.supadataApiKey, "example-supadata");
+  assert.equal(normalized.youtubeApiKey, "example-youtube");
   assert.equal(
     settings.chatCompletionsUrl(),
     "https://api.deepseek.com/chat/completions",

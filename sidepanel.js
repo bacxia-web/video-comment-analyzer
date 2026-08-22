@@ -1,7 +1,7 @@
 /**
  * SIDE PANEL LOGIC
  *
- * Handles the UI for YouTube Digest: video detection, transcript analysis,
+ * Handles the UI for YouTube Panorama: video detection, transcript analysis,
  * rendering results, and export features.
  */
 
@@ -27,7 +27,14 @@ let currentVideoDescription = "";
 let currentVideoDuration = 0;
 let isAnalysisLoading = false; // Track if analysis is in progress
 let youtubeTabId = null; // Store the YouTube tab ID for reliable messaging
-let errorAction = null;
+let currentComments = [];
+let currentCommentStats = null;
+let currentCommentAnalysis = null;
+let currentCommentsTruncated = false;
+let currentTopComments = [];
+let isCommentsLoading = false;
+let isCommentAnalysisLoading = false;
+let commentCacheCheckedVideoId = null;
 
 // --- Translation state ---
 // The public transcript control intentionally supports only the original
@@ -233,15 +240,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
   await evictOldCacheEntries(20);
 
-  const configStatus = await chrome.runtime.sendMessage({
-    action: "checkConfig",
-  });
-
-  if (!configStatus.hasSupadataKey || !configStatus.hasAiKey) {
-    showConfigError(configStatus);
-    return;
-  }
-
   await checkCurrentTab();
 });
 
@@ -266,6 +264,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .getElementById("notesFilterAll")
       ?.classList.contains("active");
     loadNotes(filterAll ? null : currentVideoId);
+    sendResponse({ success: true });
+  }
+  if (
+    message.action === "commentsProgress" &&
+    message.videoId === currentVideoId &&
+    isCommentsLoading
+  ) {
+    setCommentsStatus(
+      `Fetching comments... ${Number(message.count) || 0} loaded. ${message.detail || ""}`,
+    );
     sendResponse({ success: true });
   }
   return false;
@@ -358,10 +366,6 @@ function setupEventListeners() {
 
   // Error retry
   document.getElementById("errorBtn").addEventListener("click", () => {
-    if (errorAction) {
-      errorAction();
-      return;
-    }
     if (currentVideoId) {
       startDigest(currentVideoId, currentVideoUrl);
     }
@@ -383,6 +387,13 @@ function setupEventListeners() {
       handleTranscriptModeChange(button.dataset.transcriptMode);
     });
   });
+
+  document
+    .getElementById("commentFetchBtn")
+    ?.addEventListener("click", fetchCurrentComments);
+  document
+    .getElementById("commentAnalyzeBtn")
+    ?.addEventListener("click", analyzeCurrentComments);
 
   // Follow playback button — re-enables auto-scroll after user scrolled away
   document
@@ -452,7 +463,7 @@ async function checkCurrentTab() {
       if (tabs[0]) tab = tabs[0];
     }
 
-    debugLog("[YouTube Digest Panel] Found tab:", tab?.id, tab?.url);
+    debugLog("[YouTube Panorama Panel] Found tab:", tab?.id, tab?.url);
 
     if (!tab?.url) {
       showState("welcome");
@@ -473,7 +484,7 @@ async function checkCurrentTab() {
           action: "relayToContent",
           payload: { action: "getVideoInfo" },
         });
-        debugLog("[YouTube Digest Panel] getVideoInfo result:", result);
+        debugLog("[YouTube Panorama Panel] getVideoInfo result:", result);
         if (result.success && result.response) {
           currentVideoTitle = result.response.title || "";
           currentChannelName = result.response.channelName || "";
@@ -481,7 +492,7 @@ async function checkCurrentTab() {
           currentVideoDuration = result.response.duration || 0;
         }
       } catch (e) {
-        console.error("[YouTube Digest Panel] getVideoInfo error:", e);
+        console.error("[YouTube Panorama Panel] getVideoInfo error:", e);
         currentVideoTitle = "";
         currentChannelName = "";
         currentVideoDescription = "";
@@ -539,6 +550,7 @@ async function startDigest(videoId, videoUrl) {
     translationGeneration += 1;
     if (transcriptScrollObserver) transcriptScrollObserver.disconnect();
     transcriptScrollObserver = null;
+    resetCommentState();
   }
 
   // Check cache for this video
@@ -614,16 +626,10 @@ async function startDigest(videoId, videoUrl) {
   });
 
   if (!transcriptResult.success) {
-    if (transcriptResult.error === "NO_SUPADATA_KEY") {
-      showError(
-        "API key missing",
-        "Add your Supadata API key in YouTube Digest Settings.",
-      );
-      return;
-    }
-    showError(
-      "No transcript found",
-      transcriptResult.message || transcriptResult.error,
+    showCommentsWithoutTranscript(
+      transcriptResult.error === "NO_SUPADATA_KEY"
+        ? "Add a Supadata API key in Settings to use transcript features. Comment fetching still works."
+        : `${transcriptResult.message || transcriptResult.error} Comment fetching may still work.`,
     );
     return;
   }
@@ -677,7 +683,7 @@ function renderAnalysisResults(analysis) {
     `;
     li.addEventListener("click", () => {
       debugLog(
-        "[YouTube Digest Panel] Chapter clicked:",
+        "[YouTube Panorama Panel] Chapter clicked:",
         chapter.timestamp,
         chapter.timestampSeconds,
       );
@@ -708,7 +714,7 @@ function renderAnalysisResults(analysis) {
     `;
     div.addEventListener("click", () => {
       debugLog(
-        "[YouTube Digest Panel] Quote clicked:",
+        "[YouTube Panorama Panel] Quote clicked:",
         quote.timestamp,
         quote.timestampSeconds,
       );
@@ -767,7 +773,7 @@ async function saveQuoteAsNote(quote, btn) {
       // Refresh notes list if on Notes tab
       loadNotes(currentVideoId);
     } else {
-      console.error("[YouTube Digest] Save quote as note failed:", result.error);
+      console.error("[YouTube Panorama] Save quote as note failed:", result.error);
       btn.textContent = "Error";
       setTimeout(() => {
         btn.textContent = originalText;
@@ -775,7 +781,7 @@ async function saveQuoteAsNote(quote, btn) {
       }, 1500);
     }
   } catch (error) {
-    console.error("[YouTube Digest] Save quote as note error:", error);
+    console.error("[YouTube Panorama] Save quote as note error:", error);
     btn.textContent = "Error";
     setTimeout(() => {
       btn.textContent = originalText;
@@ -892,7 +898,7 @@ function exportTranscript() {
 
   exportText += `TRANSCRIPT:\n\n${transcriptContent}\n`;
   exportText += `\n${"—".repeat(60)}\n`;
-  exportText += `Exported by YouTube Digest\n`;
+  exportText += `Exported by YouTube Panorama\n`;
 
   const filename = `${sanitizeFilename(currentVideoTitle)}-transcript.txt`;
   downloadTextFile(exportText, filename);
@@ -932,24 +938,10 @@ function updateLoading(title, subtitle) {
 }
 
 function showError(title, message) {
-  errorAction = null;
   showState("error");
   document.getElementById("errorTitle").textContent = title;
   document.getElementById("errorMessage").textContent = message;
   document.getElementById("errorBtn").textContent = "Try Again";
-}
-
-function showConfigError(configStatus) {
-  const missingKeys = [];
-  if (!configStatus.hasSupadataKey) missingKeys.push("Supadata");
-  if (!configStatus.hasAiKey) missingKeys.push("AI provider");
-
-  showState("error");
-  document.getElementById("errorTitle").textContent = "API Keys Missing";
-  document.getElementById("errorMessage").textContent =
-    `Add your ${missingKeys.join(" and ")} API key${missingKeys.length === 1 ? "" : "s"} in YouTube Digest Settings.`;
-  document.getElementById("errorBtn").textContent = "Open Settings";
-  errorAction = () => chrome.runtime.sendMessage({ action: "openOptions" });
 }
 
 // ============================================================
@@ -975,6 +967,10 @@ function switchTab(tabName) {
   // Lazy-load LLM analysis when user switches to Overview tab
   if (tabName === "overview" && !currentAnalysis && !isAnalysisLoading) {
     triggerAnalysis();
+  }
+
+  if (tabName === "comments") {
+    initializeCommentsTab();
   }
 }
 
@@ -1023,7 +1019,7 @@ async function triggerAnalysis() {
     // Save to cache now that we have analysis
     await saveToCache(currentVideoId);
   } catch (error) {
-    console.error("[YouTube Digest Panel] Analysis error:", error);
+    console.error("[YouTube Panorama Panel] Analysis error:", error);
     if (chapterList)
       chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">Error: ${escapeHtml(error.message)}</li>`;
   }
@@ -1032,13 +1028,343 @@ async function triggerAnalysis() {
 }
 
 // ============================================================
+// COMMENTS
+// ============================================================
+
+function setCommentsStatus(message, isError = false) {
+  const status = document.getElementById("commentsStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function resetCommentState() {
+  currentComments = [];
+  currentCommentStats = null;
+  currentCommentAnalysis = null;
+  currentCommentsTruncated = false;
+  currentTopComments = [];
+  isCommentsLoading = false;
+  isCommentAnalysisLoading = false;
+  commentCacheCheckedVideoId = null;
+
+  document.getElementById("commentStats")?.setAttribute("hidden", "");
+  document.getElementById("commentActions")?.setAttribute("hidden", "");
+  document.getElementById("commentAnalysis")?.setAttribute("hidden", "");
+  document.getElementById("topCommentsSection")?.setAttribute("hidden", "");
+  const fetchButton = document.getElementById("commentFetchBtn");
+  if (fetchButton) {
+    fetchButton.disabled = false;
+    fetchButton.textContent = "Fetch comments";
+  }
+  setCommentsStatus("Fetch public comments and replies when you are ready.");
+}
+
+function showCommentsWithoutTranscript(message) {
+  currentTranscript = null;
+  currentTranscriptText = null;
+  currentTranscriptTimestamped = null;
+  currentAnalysis = null;
+  const transcriptList = document.getElementById("transcriptList");
+  if (transcriptList) {
+    transcriptList.textContent = message;
+    transcriptList.className = "comments-status";
+  }
+  showState("results");
+  document.getElementById("tabsNav").style.display = "flex";
+  switchTab("comments");
+}
+
+async function initializeCommentsTab() {
+  if (!currentVideoId || commentCacheCheckedVideoId === currentVideoId) return;
+  commentCacheCheckedVideoId = currentVideoId;
+  try {
+    const stored = await chrome.storage.local.get(`comments_${currentVideoId}`);
+    const cached = stored[`comments_${currentVideoId}`];
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (!cached || Date.now() - Number(cached.timestamp || 0) > THIRTY_DAYS) {
+      if (cached) await chrome.storage.local.remove(`comments_${currentVideoId}`);
+      return;
+    }
+    currentCommentStats = cached.stats || null;
+    currentCommentAnalysis = cached.analysis || null;
+    currentCommentsTruncated = !!cached.truncated;
+    currentTopComments = Array.isArray(cached.topComments)
+      ? cached.topComments
+      : [];
+    renderCommentStats();
+    renderTopComments(currentTopComments);
+    if (currentCommentAnalysis) {
+      renderCommentAnalysis(currentCommentAnalysis);
+      document.getElementById("commentSampleNote").textContent = cached.sampleSize
+        ? `AI sample: ${cached.sampleSize} comments`
+        : "";
+    }
+    const fetchButton = document.getElementById("commentFetchBtn");
+    if (fetchButton) fetchButton.textContent = "Refresh comments";
+    setCommentsStatus("Loaded a recent local comment analysis. Refresh to fetch the latest discussion.");
+  } catch (error) {
+    console.error("Comment cache load error:", error);
+  }
+}
+
+async function fetchCurrentComments() {
+  if (!currentVideoId || isCommentsLoading) return;
+  isCommentsLoading = true;
+  const fetchButton = document.getElementById("commentFetchBtn");
+  const analyzeButton = document.getElementById("commentAnalyzeBtn");
+  if (fetchButton) {
+    fetchButton.disabled = true;
+    fetchButton.textContent = "Fetching...";
+  }
+  if (analyzeButton) analyzeButton.disabled = true;
+  setCommentsStatus("Fetching public comments through the YouTube Data API...");
+
+  try {
+    const result = await chrome.runtime.sendMessage({
+      action: "fetchComments",
+      videoId: currentVideoId,
+    });
+    if (!result?.success) {
+      const message =
+        result?.error === "NO_YOUTUBE_KEY"
+          ? "Add a YouTube Data API key in Settings, then try again."
+          : result?.message || result?.error || "Could not fetch comments.";
+      setCommentsStatus(message, true);
+      return;
+    }
+    currentComments = result.comments || [];
+    currentCommentStats = result.stats || null;
+    currentCommentsTruncated = !!result.truncated;
+    currentCommentAnalysis = null;
+    currentTopComments = [...currentComments]
+      .sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0))
+      .slice(0, 20);
+    renderCommentStats();
+    renderTopComments(currentTopComments);
+    document.getElementById("commentAnalysis")?.setAttribute("hidden", "");
+    const actions = document.getElementById("commentActions");
+    if (actions) actions.hidden = currentComments.length === 0;
+    document.getElementById("commentSampleNote").textContent =
+      currentComments.length > 400
+        ? "AI will sample up to 400 comments"
+        : "";
+    setCommentsStatus(
+      currentComments.length
+        ? `Fetched ${currentComments.length} comments and replies${currentCommentsTruncated ? " (1,000-comment limit reached)" : ""}.`
+        : "No public comments were returned for this video.",
+    );
+    await saveCommentCache();
+  } catch (error) {
+    setCommentsStatus(error.message || "Could not fetch comments.", true);
+  } finally {
+    isCommentsLoading = false;
+    if (fetchButton) {
+      fetchButton.disabled = false;
+      fetchButton.textContent = currentCommentStats
+        ? "Refresh comments"
+        : "Fetch comments";
+    }
+    if (analyzeButton) analyzeButton.disabled = currentComments.length === 0;
+  }
+}
+
+async function analyzeCurrentComments() {
+  if (!currentComments.length || isCommentAnalysisLoading) return;
+  isCommentAnalysisLoading = true;
+  const button = document.getElementById("commentAnalyzeBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Analyzing...";
+  }
+  setCommentsStatus("Analyzing audience topics and sentiment with DeepSeek...");
+  try {
+    const result = await chrome.runtime.sendMessage({
+      action: "analyzeComments",
+      comments: currentComments,
+      videoTitle: currentVideoTitle,
+      channelName: currentChannelName,
+    });
+    if (!result?.success) {
+      const message =
+        result?.error === "NO_AI_KEY"
+          ? "Add a DeepSeek API key in Settings, then try again."
+          : result?.message || result?.error || "Comment analysis failed.";
+      setCommentsStatus(message, true);
+      return;
+    }
+    currentCommentAnalysis = result.analysis;
+    renderCommentAnalysis(currentCommentAnalysis);
+    document.getElementById("commentSampleNote").textContent =
+      `AI sample: ${result.sampleSize || currentComments.length} comments`;
+    setCommentsStatus("Comment analysis complete.");
+    await saveCommentCache(result.sampleSize);
+  } catch (error) {
+    setCommentsStatus(error.message || "Comment analysis failed.", true);
+  } finally {
+    isCommentAnalysisLoading = false;
+    if (button) {
+      button.disabled = false;
+      button.textContent = currentCommentAnalysis
+        ? "Analyze again"
+        : "Analyze with AI";
+    }
+  }
+}
+
+function renderCommentStats() {
+  const container = document.getElementById("commentStats");
+  if (!container || !currentCommentStats) return;
+  container.replaceChildren();
+  const entries = [
+    ["Comments", currentCommentStats.total],
+    ["Top-level", currentCommentStats.topLevel],
+    ["Replies", currentCommentStats.replies],
+    ["Authors", currentCommentStats.authors],
+  ];
+  for (const [label, value] of entries) {
+    const card = document.createElement("div");
+    card.className = "comment-stat";
+    const number = document.createElement("span");
+    number.className = "comment-stat-value";
+    number.textContent = Number(value || 0).toLocaleString();
+    const caption = document.createElement("span");
+    caption.className = "comment-stat-label";
+    caption.textContent = label;
+    card.append(number, caption);
+    container.appendChild(card);
+  }
+  container.hidden = false;
+}
+
+function renderTopComments(comments) {
+  const section = document.getElementById("topCommentsSection");
+  const container = document.getElementById("topComments");
+  if (!section || !container) return;
+  container.replaceChildren();
+  const safeComments = Array.isArray(comments) ? comments : [];
+  for (const comment of safeComments) {
+    const card = document.createElement("div");
+    card.className = "top-comment";
+    const meta = document.createElement("div");
+    meta.className = "top-comment-meta";
+    const author = document.createElement("span");
+    author.textContent = comment.author || "YouTube viewer";
+    const likes = document.createElement("span");
+    likes.textContent = `${Number(comment.likeCount) || 0} likes${comment.parentCommentId ? " · reply" : ""}`;
+    meta.append(author, likes);
+    const text = document.createElement("div");
+    text.className = "top-comment-text";
+    text.textContent = comment.text || "";
+    card.append(meta, text);
+    container.appendChild(card);
+  }
+  section.hidden = safeComments.length === 0;
+}
+
+function renderCommentAnalysis(analysis) {
+  if (!analysis) return;
+  const wrapper = document.getElementById("commentAnalysis");
+  const sentiment = document.getElementById("commentSentiment");
+  sentiment.className = `sentiment-badge ${analysis.overallSentiment || "neutral"}`;
+  sentiment.textContent = analysis.overallSentiment || "neutral";
+  document.getElementById("commentSummary").textContent =
+    analysis.summary || "No summary returned.";
+
+  const topics = document.getElementById("commentTopics");
+  topics.replaceChildren();
+  for (const topic of analysis.topics || []) {
+    const card = document.createElement("div");
+    card.className = "comment-topic";
+    const header = document.createElement("div");
+    header.className = "comment-topic-header";
+    const title = document.createElement("div");
+    title.className = "comment-topic-title";
+    title.textContent = topic.title;
+    const badge = document.createElement("span");
+    badge.className = `sentiment-badge ${topic.sentiment || "neutral"}`;
+    badge.textContent = topic.sentiment || "neutral";
+    header.append(title, badge);
+    const summary = document.createElement("p");
+    summary.className = "comment-topic-summary";
+    summary.textContent = topic.summary || "";
+    card.append(header, summary);
+    for (const evidence of topic.evidence || []) {
+      const quote = document.createElement("div");
+      quote.className = "comment-evidence";
+      quote.textContent = evidence.text;
+      const meta = document.createElement("div");
+      meta.className = "comment-evidence-meta";
+      meta.textContent = `${evidence.author || "YouTube viewer"} · ${Number(evidence.likeCount) || 0} likes`;
+      quote.appendChild(meta);
+      card.appendChild(quote);
+    }
+    topics.appendChild(card);
+  }
+  renderCommentInsightList(
+    "viewerQuestionsSection",
+    "viewerQuestions",
+    analysis.viewerQuestions,
+  );
+  renderCommentInsightList(
+    "creatorFeedbackSection",
+    "creatorFeedback",
+    analysis.creatorFeedback,
+  );
+  wrapper.hidden = false;
+}
+
+function renderCommentInsightList(sectionId, listId, values) {
+  const section = document.getElementById(sectionId);
+  const list = document.getElementById(listId);
+  if (!section || !list) return;
+  list.replaceChildren();
+  const safeValues = Array.isArray(values) ? values : [];
+  for (const value of safeValues) {
+    const item = document.createElement("li");
+    item.textContent = value;
+    list.appendChild(item);
+  }
+  section.hidden = safeValues.length === 0;
+}
+
+async function saveCommentCache(sampleSize = null) {
+  if (!currentVideoId || !currentCommentStats) return;
+  const cacheData = {
+    stats: currentCommentStats,
+    analysis: currentCommentAnalysis,
+    topComments: currentTopComments,
+    truncated: currentCommentsTruncated,
+    sampleSize,
+    timestamp: Date.now(),
+  };
+  try {
+    await chrome.storage.local.set({
+      [`comments_${currentVideoId}`]: cacheData,
+    });
+    const all = await chrome.storage.local.get(null);
+    const keys = Object.keys(all).filter((key) => key.startsWith("comments_"));
+    if (keys.length > 20) {
+      const oldest = keys
+        .map((key) => ({ key, timestamp: Number(all[key]?.timestamp) || 0 }))
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(0, keys.length - 20)
+        .map((entry) => entry.key);
+      await chrome.storage.local.remove(oldest);
+    }
+  } catch (error) {
+    console.error("Comment cache save error:", error);
+  }
+}
+
+// ============================================================
 // TIMESTAMP / SEEK
 // ============================================================
 
 async function seekTo(seconds) {
-  debugLog("[YouTube Digest Panel] seekTo called with:", seconds);
+  debugLog("[YouTube Panorama Panel] seekTo called with:", seconds);
   if (seconds === undefined || seconds === null) {
-    debugLog("[YouTube Digest Panel] seekTo aborted - no seconds value");
+    debugLog("[YouTube Panorama Panel] seekTo aborted - no seconds value");
     return;
   }
 
@@ -1052,11 +1378,11 @@ async function seekTo(seconds) {
     if (youtubeTabId) {
       try {
         await chrome.tabs.sendMessage(youtubeTabId, payload);
-        debugLog("[YouTube Digest Panel] seekTo direct success");
+        debugLog("[YouTube Panorama Panel] seekTo direct success");
         return;
       } catch (directErr) {
         debugLog(
-          "[YouTube Digest Panel] Direct seekTo failed, falling back to relay:",
+          "[YouTube Panorama Panel] Direct seekTo failed, falling back to relay:",
           directErr.message,
         );
       }
@@ -1067,9 +1393,9 @@ async function seekTo(seconds) {
       action: "relayToContent",
       payload,
     });
-    debugLog("[YouTube Digest Panel] seekTo relay result:", result);
+    debugLog("[YouTube Panorama Panel] seekTo relay result:", result);
   } catch (error) {
-    console.error("[YouTube Digest Panel] seekTo error:", error);
+    console.error("[YouTube Panorama Panel] seekTo error:", error);
   }
 }
 
@@ -1411,7 +1737,7 @@ async function evictOldCacheEntries(maxEntries) {
       .map((e) => e.key);
     if (toRemove.length > 0) {
       await chrome.storage.local.remove(toRemove);
-      debugLog(`[YouTube Digest] Evicted ${toRemove.length} old cache entries`);
+      debugLog(`[YouTube Panorama] Evicted ${toRemove.length} old cache entries`);
     }
   } catch (error) {
     console.error("Cache eviction error:", error);
@@ -1473,7 +1799,7 @@ async function loadNotes(videoId) {
       renderNotes(result.notes, videoId);
     }
   } catch (error) {
-    console.error("[YouTube Digest Panel] Load notes error:", error);
+    console.error("[YouTube Panorama Panel] Load notes error:", error);
   }
 }
 
@@ -1580,7 +1906,7 @@ async function deleteNote(noteId) {
       noteId: noteId,
     });
   } catch (error) {
-    console.error("[YouTube Digest Panel] Delete note error:", error);
+    console.error("[YouTube Panorama Panel] Delete note error:", error);
   }
 }
 

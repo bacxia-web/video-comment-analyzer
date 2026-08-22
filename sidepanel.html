@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YouTube Digest</title>
+    <title>YouTube Panorama</title>
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
     <!-- HEADER -->
-    <!-- Note: the panel's own "YouTube Digest" title is shown by Chrome's side-panel
+    <!-- Note: the panel's own "YouTube Panorama" title is shown by Chrome's side-panel
          title bar, so we don't repeat a logo here. -->
     <div class="header">
       <div class="header-top">
@@ -21,8 +21,8 @@
           class="settings-btn"
           id="settingsBtn"
           type="button"
-          title="Open YouTube Digest settings"
-          aria-label="Open YouTube Digest settings"
+          title="Open YouTube Panorama settings"
+          aria-label="Open YouTube Panorama settings"
         >
           Settings
         </button>
@@ -32,6 +32,7 @@
       <div class="tabs" id="tabsNav" style="display: none">
         <button class="tab active" data-tab="transcript">Transcript</button>
         <button class="tab" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="comments">Comments</button>
         <button class="tab" data-tab="notes">Notes</button>
       </div>
     </div>
@@ -159,6 +160,55 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- TAB: Comments (official API + optional AI analysis) -->
+        <div class="tab-panel" data-panel="comments">
+          <div class="section">
+            <div class="section-header">
+              <div class="section-title">Audience Comments</div>
+              <button class="enhance-btn" id="commentFetchBtn" type="button">
+                Fetch comments
+              </button>
+            </div>
+            <p class="comments-status" id="commentsStatus">
+              Fetch public comments and replies when you are ready.
+            </p>
+            <div class="comment-stats" id="commentStats" hidden></div>
+            <div class="comment-actions" id="commentActions" hidden>
+              <button class="comment-analyze-btn" id="commentAnalyzeBtn" type="button">
+                Analyze with AI
+              </button>
+              <span id="commentSampleNote"></span>
+            </div>
+          </div>
+
+          <div id="commentAnalysis" hidden>
+            <div class="section">
+              <div class="section-title">Audience Pulse</div>
+              <div class="comment-summary-card">
+                <span class="sentiment-badge" id="commentSentiment"></span>
+                <p id="commentSummary"></p>
+              </div>
+            </div>
+            <div class="section">
+              <div class="section-title">Discussion Topics</div>
+              <div id="commentTopics"></div>
+            </div>
+            <div class="section comment-insight-section" id="viewerQuestionsSection" hidden>
+              <div class="section-title">Viewer Questions</div>
+              <ul class="comment-insight-list" id="viewerQuestions"></ul>
+            </div>
+            <div class="section comment-insight-section" id="creatorFeedbackSection" hidden>
+              <div class="section-title">Creator Takeaways</div>
+              <ul class="comment-insight-list" id="creatorFeedback"></ul>
+            </div>
+          </div>
+
+          <div class="section" id="topCommentsSection" hidden>
+            <div class="section-title">Top Comments</div>
+            <div id="topComments"></div>
           </div>
         </div>
 

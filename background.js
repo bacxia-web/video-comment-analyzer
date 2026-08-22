@@ -13,7 +13,7 @@
 
 // Import safe defaults and validation helpers. Secret keys live in
 // chrome.storage.local and are never part of the extension source.
-importScripts("settings.js");
+importScripts("settings.js", "comments.js");
 
 const DEBUG = false;
 const AI_PROVIDER_IDLE_TIMEOUT_MS = 50_000;
@@ -28,7 +28,7 @@ const debugLog = (...args) => {
 chrome.storage.local
   .setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" })
   .catch((error) =>
-    console.warn("[YouTube Digest] Could not restrict storage access:", error),
+    console.warn("[YouTube Panorama] Could not restrict storage access:", error),
   );
 
 async function getSettings() {
@@ -81,7 +81,7 @@ async function requestAiCompletion({
   const settings = await getSettings();
   if (!settings.aiApiKey) {
     const error = new Error(
-      "DeepSeek API key not configured. Open YouTube Digest Settings.",
+      "DeepSeek API key not configured. Open YouTube Panorama Settings.",
     );
     error.code = "NO_AI_KEY";
     throw error;
@@ -256,7 +256,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
  * Keep the side panel scoped to YouTube tabs only.
  *
  * Chrome side panels are "global" by default: once opened, the panel follows
- * you to every tab. To make YouTube Digest behave like a YouTube-only tool, we
+ * you to every tab. To make YouTube Panorama behave like a YouTube-only tool, we
  * enable the panel on YouTube tabs and disable it everywhere else. Disabling
  * on a tab makes Chrome hide/close the panel for that tab, so it never lingers
  * on a new tab or some other website.
@@ -322,6 +322,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "fetchComments") {
+    handleFetchComments(message.videoId)
+      .then(sendResponse)
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "analyzeComments") {
+    handleAnalyzeComments(
+      message.comments,
+      message.videoTitle,
+      message.channelName,
+    )
+      .then(sendResponse)
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.action === "explainSelection") {
     // Explain selected text using DeepSeek.
     handleExplainSelection(
@@ -383,18 +401,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.action === "checkConfig") {
-    getSettings()
-      .then((settings) =>
-        sendResponse({
-          hasSupadataKey: !!settings.supadataApiKey,
-          hasAiKey: !!settings.aiApiKey,
-        }),
-      )
-      .catch((error) => sendResponse({ error: error.message }));
-    return true;
-  }
-
   if (message.action === "openOptions") {
     chrome.runtime.openOptionsPage();
     sendResponse({ success: true });
@@ -403,7 +409,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "openSidePanel") {
     const tabId = sender.tab?.id;
-    debugLog("[YouTube Digest BG] openSidePanel requested from tab:", tabId);
+    debugLog("[YouTube Panorama BG] openSidePanel requested from tab:", tabId);
 
     // Re-enable the panel (it may have been disabled by auto-close) and open it.
     // IMPORTANT: we call setOptions + open synchronously (no await between them)
@@ -426,7 +432,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }, 300);
         })
         .catch((err) => {
-          console.error("[YouTube Digest BG] openSidePanel error:", err);
+          console.error("[YouTube Panorama BG] openSidePanel error:", err);
         });
     } else {
       // Fallback: find the active tab
@@ -441,7 +447,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
             chrome.sidePanel.open({ tabId: tabs[0].id }).catch((err) => {
               console.error(
-                "[YouTube Digest BG] openSidePanel fallback error:",
+                "[YouTube Panorama BG] openSidePanel fallback error:",
                 err,
               );
             });
@@ -455,7 +461,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Relay messages from side panel to content script
   if (message.action === "relayToContent") {
-    debugLog("[YouTube Digest BG] Relay request:", message.payload?.action);
+    debugLog("[YouTube Panorama BG] Relay request:", message.payload?.action);
     (async () => {
       try {
         // Query specifically for YouTube tabs to avoid side panel context issues
@@ -465,7 +471,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           lastFocusedWindow: true,
         });
         debugLog(
-          "[YouTube Digest BG] Active tab in last focused window:",
+          "[YouTube Panorama BG] Active tab in last focused window:",
           tabs.length,
           tabs[0]?.url,
         );
@@ -476,18 +482,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             url: "https://www.youtube.com/*",
             active: true,
           });
-          debugLog("[YouTube Digest BG] Active YouTube tabs:", tabs.length);
+          debugLog("[YouTube Panorama BG] Active YouTube tabs:", tabs.length);
         }
 
         // Still nothing? Try any YouTube tab
         if (!tabs[0]) {
           tabs = await chrome.tabs.query({ url: "https://www.youtube.com/*" });
-          debugLog("[YouTube Digest BG] Any YouTube tabs:", tabs.length);
+          debugLog("[YouTube Panorama BG] Any YouTube tabs:", tabs.length);
         }
 
         if (tabs[0]) {
           debugLog(
-            "[YouTube Digest BG] Sending to tab:",
+            "[YouTube Panorama BG] Sending to tab:",
             tabs[0].id,
             "URL:",
             tabs[0].url,
@@ -519,20 +525,231 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          debugLog("[YouTube Digest BG] Got response from content:", response);
+          debugLog("[YouTube Panorama BG] Got response from content:", response);
           sendResponse({ success: true, response });
         } else {
-          debugLog("[YouTube Digest BG] No YouTube tab found");
+          debugLog("[YouTube Panorama BG] No YouTube tab found");
           sendResponse({ success: false, error: "No YouTube tab found" });
         }
       } catch (err) {
-        console.error("[YouTube Digest BG] Relay error:", err.message);
+        console.error("[YouTube Panorama BG] Relay error:", err.message);
         sendResponse({ success: false, error: err.message });
       }
     })();
     return true; // Keep channel open for async response
   }
 });
+
+// ============================================================
+// YOUTUBE COMMENT COLLECTION AND ANALYSIS
+// ============================================================
+
+function publishCommentProgress(videoId, count, detail) {
+  chrome.runtime
+    .sendMessage({ action: "commentsProgress", videoId, count, detail })
+    .catch(() => {});
+}
+
+async function fetchYouTubeApiJson(url) {
+  const response = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.ok && !data.error) return data;
+
+  const reason = data.error?.errors?.[0]?.reason || "";
+  const error = new Error(
+    reason === "commentsDisabled"
+      ? "Comments are disabled for this video."
+      : data.error?.message || `YouTube Data API error: ${response.status}`,
+  );
+  error.code =
+    reason === "commentsDisabled"
+      ? "COMMENTS_DISABLED"
+      : response.status === 403
+        ? "YOUTUBE_API_FORBIDDEN"
+        : response.status === 400
+          ? "YOUTUBE_API_BAD_REQUEST"
+          : "YOUTUBE_API_ERROR";
+  throw error;
+}
+
+async function handleFetchComments(videoId) {
+  try {
+    const settings = await getSettings();
+    if (!settings.youtubeApiKey) {
+      return {
+        success: false,
+        error: "NO_YOUTUBE_KEY",
+        message: "YouTube Data API key not configured. Open YouTube Panorama Settings.",
+      };
+    }
+
+    // Reuse the same strict validation used by transcript requests.
+    YTD_SETTINGS.canonicalYouTubeUrl(videoId);
+    const comments = [];
+    const seen = new Set();
+    const pushComment = (rawComment, parentCommentId = null) => {
+      if (comments.length >= YTD_COMMENTS.MAX_FETCHED_COMMENTS) return;
+      const comment = YTD_COMMENTS.normalizeApiComment(
+        rawComment,
+        parentCommentId,
+      );
+      if (!comment || seen.has(comment.id)) return;
+      seen.add(comment.id);
+      comments.push(comment);
+    };
+
+    async function fetchAllReplies(parentId, alreadyIncluded) {
+      let pageToken = "";
+      do {
+        const url = new URL("https://www.googleapis.com/youtube/v3/comments");
+        url.searchParams.set("part", "snippet");
+        url.searchParams.set("parentId", parentId);
+        url.searchParams.set("maxResults", "100");
+        url.searchParams.set("textFormat", "plainText");
+        url.searchParams.set("key", settings.youtubeApiKey);
+        if (pageToken) url.searchParams.set("pageToken", pageToken);
+        const data = await fetchYouTubeApiJson(url);
+        for (const reply of data.items || []) pushComment(reply, parentId);
+        pageToken = data.nextPageToken || "";
+        publishCommentProgress(
+          videoId,
+          comments.length,
+          `Loading replies to a ${alreadyIncluded ? "thread" : "comment"}`,
+        );
+      } while (
+        pageToken &&
+        comments.length < YTD_COMMENTS.MAX_FETCHED_COMMENTS
+      );
+    }
+
+    let pageToken = "";
+    let page = 0;
+    do {
+      const url = new URL(
+        "https://www.googleapis.com/youtube/v3/commentThreads",
+      );
+      url.searchParams.set("part", "snippet,replies");
+      url.searchParams.set("videoId", videoId);
+      url.searchParams.set("maxResults", "100");
+      url.searchParams.set("order", "relevance");
+      url.searchParams.set("textFormat", "plainText");
+      url.searchParams.set("key", settings.youtubeApiKey);
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+      const data = await fetchYouTubeApiJson(url);
+      page += 1;
+      for (const thread of data.items || []) {
+        if (comments.length >= YTD_COMMENTS.MAX_FETCHED_COMMENTS) break;
+        const topLevel = thread?.snippet?.topLevelComment;
+        if (!topLevel) continue;
+        pushComment(topLevel);
+        const includedReplies = thread?.replies?.comments || [];
+        for (const reply of includedReplies) pushComment(reply, topLevel.id);
+        const totalReplies = Math.max(
+          0,
+          Number(thread?.snippet?.totalReplyCount) || 0,
+        );
+        if (
+          totalReplies > includedReplies.length &&
+          comments.length < YTD_COMMENTS.MAX_FETCHED_COMMENTS
+        ) {
+          await fetchAllReplies(topLevel.id, includedReplies.length > 0);
+        }
+      }
+      publishCommentProgress(
+        videoId,
+        comments.length,
+        `Loaded page ${page}`,
+      );
+      pageToken = data.nextPageToken || "";
+    } while (
+      pageToken &&
+      comments.length < YTD_COMMENTS.MAX_FETCHED_COMMENTS
+    );
+
+    return {
+      success: true,
+      comments,
+      stats: YTD_COMMENTS.calculateStats(comments),
+      truncated: comments.length >= YTD_COMMENTS.MAX_FETCHED_COMMENTS,
+    };
+  } catch (error) {
+    console.error("Comment fetch error:", error.message);
+    return {
+      success: false,
+      error: error.code || "COMMENT_FETCH_FAILED",
+      message: error.message || "Failed to fetch comments.",
+    };
+  }
+}
+
+async function handleAnalyzeComments(comments, videoTitle, channelName) {
+  try {
+    const safeComments = (Array.isArray(comments) ? comments : [])
+      .slice(0, YTD_COMMENTS.MAX_FETCHED_COMMENTS)
+      .filter(
+        (comment) =>
+          comment &&
+          typeof comment.id === "string" &&
+          typeof comment.text === "string",
+      );
+    if (!safeComments.length) {
+      return { success: false, error: "No comments to analyze." };
+    }
+
+    const sample = YTD_COMMENTS.selectForAnalysis(safeComments);
+    const commentsJsonl = sample
+      .map((comment) =>
+        JSON.stringify({
+          id: comment.id,
+          text: comment.text.slice(0, 1200),
+          likes: Math.max(0, Number(comment.likeCount) || 0),
+          isReply: !!comment.parentCommentId,
+        }),
+      )
+      .join("\n");
+    const variables = {
+      videoTitle: videoTitle || "Unknown",
+      channelName: channelName || "Unknown",
+      totalComments: safeComments.length,
+      sampleSize: sample.length,
+      commentsJsonl,
+    };
+    const systemPrompt = await loadPromptSection(
+      "comments.md",
+      "System prompt",
+      variables,
+    );
+    const userPrompt = await loadPromptSection(
+      "comments.md",
+      "User prompt",
+      variables,
+    );
+    const { text } = await requestAiCompletion({
+      maxTokens: 6000,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+    const analysis = YTD_COMMENTS.validateAnalysis(
+      parseLooseJson(text),
+      sample,
+    );
+    return { success: true, analysis, sampleSize: sample.length };
+  } catch (error) {
+    console.error("Comment analysis error:", error.message);
+    return {
+      success: false,
+      error: error.code || error.message || "Failed to analyze comments.",
+      message: error.message || "Failed to analyze comments.",
+    };
+  }
+}
 
 /**
  * Reads the current video's full details straight from YouTube's player.
@@ -568,7 +785,7 @@ async function getPlayerVideoDetails(tabId) {
     });
     return results?.[0]?.result || null;
   } catch (e) {
-    console.warn("[YouTube Digest BG] Player details unavailable:", e.message);
+    console.warn("[YouTube Panorama BG] Player details unavailable:", e.message);
     return null;
   }
 }
@@ -596,7 +813,7 @@ async function handleFetchTranscript(videoId) {
       return {
         success: false,
         error: "NO_SUPADATA_KEY",
-        message: "Supadata API key not configured. Open YouTube Digest Settings.",
+        message: "Supadata API key not configured. Open YouTube Panorama Settings.",
       };
     }
 
@@ -640,7 +857,7 @@ async function handleFetchTranscript(videoId) {
         return {
           success: false,
           error: "INVALID_SUPADATA_KEY",
-          message: "Your Supadata API key is invalid. Open YouTube Digest Settings.",
+          message: "Your Supadata API key is invalid. Open YouTube Panorama Settings.",
         };
       }
       if (response.status === 404) {
@@ -871,7 +1088,7 @@ async function handleAnalyzeTranscript(
       return {
         success: false,
         error: "NO_AI_KEY",
-        message: "DeepSeek API key not configured. Open YouTube Digest Settings.",
+        message: "DeepSeek API key not configured. Open YouTube Panorama Settings.",
       };
     }
 
@@ -925,7 +1142,7 @@ async function handleAnalyzeTranscript(
       promptVariables,
     );
 
-    debugLog("[YouTube Digest] Requesting video analysis", settings.aiModel);
+    debugLog("[YouTube Panorama] Requesting video analysis", settings.aiModel);
     const { text: responseText } = await requestAiCompletion({
       maxTokens: 8192,
       responseFormat: { type: "json_object" },
@@ -1102,10 +1319,10 @@ async function handleSaveNote(
       const cached = await chrome.storage.local.get(`digest_${videoId}`);
       if (cached[`digest_${videoId}`]?.transcript) {
         transcript = cached[`digest_${videoId}`].transcript;
-        debugLog("[YouTube Digest] Using cached transcript for note");
+        debugLog("[YouTube Panorama] Using cached transcript for note");
       }
     } catch (e) {
-      debugLog("[YouTube Digest] No cached transcript, fetching...");
+      debugLog("[YouTube Panorama] No cached transcript, fetching...");
     }
 
     // If no cached transcript, fetch it
@@ -1226,7 +1443,7 @@ async function handleSaveNote(
 
     return { success: true, note };
   } catch (error) {
-    console.error("[YouTube Digest] Save note error:", error);
+    console.error("[YouTube Panorama] Save note error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1249,7 +1466,7 @@ async function cleanupNoteText(
   }
 
   try {
-    debugLog("[YouTube Digest] Requesting note cleanup");
+    debugLog("[YouTube Panorama] Requesting note cleanup");
     const variables = {
       videoTitle: videoTitle || "Unknown",
       fullContext,
@@ -1286,7 +1503,7 @@ async function cleanupNoteText(
       }
     } catch (parseError) {
       console.warn(
-        "[YouTube Digest] JSON parse failed for note, stripping preambles:",
+        "[YouTube Panorama] JSON parse failed for note, stripping preambles:",
         parseError,
       );
       result = result.replace(
@@ -1304,7 +1521,7 @@ async function cleanupNoteText(
 
     return result.slice(0, 3000);
   } catch (e) {
-    console.error("[YouTube Digest] Cleanup error:", e);
+    console.error("[YouTube Panorama] Cleanup error:", e);
   }
 
   // Return combined raw text if cleanup fails
@@ -1391,7 +1608,7 @@ async function handleExplainSelection(
       variables,
     );
 
-    debugLog("[YouTube Digest] Requesting selection explanation");
+    debugLog("[YouTube Panorama] Requesting selection explanation");
     const { text: explanation } = await requestAiCompletion({
       maxTokens: 1024,
       messages: [
@@ -1586,7 +1803,7 @@ async function handleTranslateContent(
     }
     return { success: true, translatedContent: aligned };
   } catch (error) {
-    console.error("[YouTube Digest] Translation error:", error);
+    console.error("[YouTube Panorama] Translation error:", error);
     return { success: false, error: error.message || "Translation failed" };
   }
 }

@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YouTube Digest Settings</title>
+    <title>YouTube Panorama Settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main class="settings-shell">
       <header>
         <div class="settings-heading-row">
-          <div class="eyebrow">YouTube Digest</div>
+          <div class="eyebrow">YouTube Panorama</div>
           <div
             class="language-switch"
             role="group"
@@ -37,9 +37,9 @@
         </div>
         <h1 data-i18n="heading">Bring your own API keys</h1>
         <p class="lede" data-i18n="lede">
-          Keys stay in this Chrome profile and are sent only to Supadata and
-          DeepSeek. This open-source extension has no developer server or
-          analytics.
+          Keys stay in this Chrome profile and are sent only to Supadata,
+          Google, and DeepSeek. This open-source extension has no developer
+          server or analytics.
         </p>
       </header>
 
@@ -74,6 +74,34 @@
         </section>
 
         <section class="card">
+          <h2 data-i18n="commentsProvider">Comments provider</h2>
+          <label for="youtubeApiKey" data-i18n="youtubeApiKeyLabel"
+            >YouTube Data API key</label
+          >
+          <input
+            id="youtubeApiKey"
+            name="youtubeApiKey"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Paste your Google API key"
+          />
+          <p class="help">
+            <span data-i18n="youtubeApiHelp"
+              >Used to fetch public comments and replies through the official
+              YouTube Data API v3.</span
+            >
+            <a
+              href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+              target="_blank"
+              rel="noreferrer"
+              data-i18n="youtubeApiLink"
+              >Enable the YouTube Data API</a
+            ><span data-i18n="youtubeApiHelpSuffix"> and create an API key.</span>
+          </p>
+        </section>
+
+        <section class="card">
           <h2 data-i18n="aiProvider">AI provider</h2>
           <div
             class="provider-summary"
@@ -99,7 +127,7 @@
           />
           <p class="help">
             <span data-i18n="deepseekHelp"
-              >YouTube Digest uses DeepSeek V4 Flash for overviews,
+              >YouTube Panorama uses DeepSeek V4 Flash for overviews,
               explanations, translation, and note polishing.</span
             >
             <a
@@ -149,7 +177,7 @@
           </p>
           <ol class="customization-steps">
             <li data-i18n="customizationStepFolder">
-              Open the extracted YouTube Digest project folder in your coding
+              Open the extracted YouTube Panorama project folder in your coding
               agent.
             </li>
             <li data-i18n="customizationStepReplace">
@@ -176,7 +204,7 @@
               and model you want to use.</span
             >
           </div>
-          <textarea id="customizationPrompt" rows="12" aria-describedby="customizationPromptReminder">Customize this local YouTube Digest workspace to use [PROVIDER] with [MODEL]. Work only in the current workspace. Before editing, verify that it contains manifest.json and that the manifest name is YouTube Digest. If verification fails, stop and ask me to open the extracted YouTube Digest project folder in my coding agent. Do not search other folders, edit a guessed copy, assume an installation path, or claim Chrome can reveal the absolute OS source path. Update the provider's API endpoint, request format, and minimum Chrome host permissions. Preserve bring-your-own-key and local Chrome storage. Never put API keys in source code, commits, logs, screenshots, this prompt, or chat; after the code is ready, tell me where to enter the key myself. Keep DeepSeek-only request fields and retry behavior isolated to DeepSeek. Handle provider-specific rules separately so one provider does not affect another. Update README.md, README.zh-CN.md, PRIVACY.md, SECURITY.md, and tests. Run npm test, npm run check, and npm run package. Then explain how to reload the unpacked extension and test it on a real YouTube video.</textarea>
+          <textarea id="customizationPrompt" rows="12" aria-describedby="customizationPromptReminder">Customize this local YouTube Panorama workspace to use [PROVIDER] with [MODEL]. Work only in the current workspace. Before editing, verify that it contains manifest.json and that the manifest name is YouTube Panorama. If verification fails, stop and ask me to open the extracted YouTube Panorama project folder in my coding agent. Do not search other folders, edit a guessed copy, assume an installation path, or claim Chrome can reveal the absolute OS source path. Update the provider's API endpoint, request format, and minimum Chrome host permissions. Preserve bring-your-own-key and local Chrome storage. Never put API keys in source code, commits, logs, screenshots, this prompt, or chat; after the code is ready, tell me where to enter the key myself. Keep DeepSeek-only request fields and retry behavior isolated to DeepSeek. Handle provider-specific rules separately so one provider does not affect another. Update README.md, README.zh-CN.md, PRIVACY.md, SECURITY.md, and tests. Run npm test, npm run check, and npm run package. Then explain how to reload the unpacked extension and test it on a real YouTube video.</textarea>
           <div class="copy-actions">
             <button
               id="copyCustomizationPromptBtn"
@@ -193,12 +221,12 @@
       <section class="card data-card">
         <h2 data-i18n="localData">Local data</h2>
         <p class="help" data-i18n="localDataHelp">
-          Digests, translations, and notes are stored only in this Chrome
-          profile. You can remove them at any time.
+          Digests, comment analyses, translations, and notes are stored only in
+          this Chrome profile. You can remove them at any time.
         </p>
         <div class="data-actions">
           <button id="clearCacheBtn" type="button" data-i18n="clearCache">
-            Clear cached digests
+            Clear cached digests and comments
           </button>
           <button id="clearNotesBtn" type="button" data-i18n="deleteNotes">
             Delete all notes

@@ -30,13 +30,13 @@ function createLocalStorage() {
 }
 
 test("Settings copy covers English and Simplified Chinese", () => {
-  assert.equal(options.translate("en", "pageTitle"), "YouTube Digest Settings");
-  assert.equal(options.translate("zh-CN", "pageTitle"), "YouTube Digest 设置");
+  assert.equal(options.translate("en", "pageTitle"), "YouTube Panorama Settings");
+  assert.equal(options.translate("zh-CN", "pageTitle"), "YouTube Panorama 设置");
   assert.equal(options.translate("en", "saveSettings"), "Save settings");
   assert.equal(options.translate("zh-CN", "saveSettings"), "保存设置");
   assert.equal(
     options.translate("zh-CN", "clearedDigests", { count: 2 }),
-    "已清除 2 条缓存摘要。",
+    "已清除 2 条缓存结果。",
   );
 
   assert.deepEqual(
@@ -137,14 +137,14 @@ test("customization guidance is concise and has a visible placeholder reminder",
   );
   assert.equal(
     options.translate("en", "customizationStepFolder"),
-    "Open the extracted YouTube Digest project folder in your coding agent.",
+    "Open the extracted YouTube Panorama project folder in your coding agent.",
   );
   assert.equal(
     options.translate("zh-CN", "customizationStepFolder"),
-    "在编程 Agent 中打开 YouTube Digest 解压后的项目文件夹。",
+    "在编程 Agent 中打开 YouTube Panorama 解压后的项目文件夹。",
   );
-  assert.doesNotMatch(html, /~\/Documents\/youtube-digest/);
-  assert.doesNotMatch(html, /%USERPROFILE%\\Documents\\youtube-digest/);
+  assert.doesNotMatch(html, /~\/Documents\/youtube-panorama/);
+  assert.doesNotMatch(html, /%USERPROFILE%\\Documents\\youtube-panorama/);
 });
 
 test("customization prompt switches languages and preserves technical values", () => {
@@ -154,10 +154,11 @@ test("customization prompt switches languages and preserves technical values", (
 
   assert.match(html, /placeholder="Paste your Supadata key"/);
   assert.match(html, /placeholder="Paste your DeepSeek key"/);
+  assert.match(html, /placeholder="Paste your Google API key"/);
   assert.match(html, /https:\/\/dash\.supadata\.ai\/auth\/sign-up/);
   assert.match(html, /https:\/\/platform\.deepseek\.com\/api_keys/);
   assert.ok(html.includes(`>${englishPrompt}</textarea>`));
-  assert.match(chinesePrompt, /^请把当前本地 YouTube Digest 工作区改为使用/);
+  assert.match(chinesePrompt, /^请把当前本地 YouTube Panorama 工作区改为使用/);
   assert.notEqual(chinesePrompt, englishPrompt);
   assert.match(
     englishPrompt,
