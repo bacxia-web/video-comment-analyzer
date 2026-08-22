@@ -155,6 +155,11 @@ test("customization prompt switches languages and preserves technical values", (
   assert.match(html, /placeholder="Paste your Supadata key"/);
   assert.match(html, /placeholder="Paste your DeepSeek key"/);
   assert.match(html, /placeholder="Paste your Google API key"/);
+  assert.match(
+    html,
+    /https:\/\/console\.cloud\.google\.com\/apis\/credentials\?project=commentanalyse/,
+  );
+  assert.doesNotMatch(html, /apis\/library\/youtube\.googleapis\.com/);
   assert.match(html, /https:\/\/dash\.supadata\.ai\/auth\/sign-up/);
   assert.match(html, /https:\/\/platform\.deepseek\.com\/api_keys/);
   assert.ok(html.includes(`>${englishPrompt}</textarea>`));

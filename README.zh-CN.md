@@ -69,8 +69,8 @@ YouTube Panorama 是一个需要自行提供 API Key 的开源项目，通过 Gi
 
 ### 获取 YouTube Data API Key
 
-1. 打开 Google Cloud 的 [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) 页面。
-2. 选择或创建 Google Cloud 项目，然后启用该 API。
+1. 打开 `commentanalyse` 项目的 [Google Cloud 凭据页面](https://console.cloud.google.com/apis/credentials?project=commentanalyse)。
+2. 确认该项目已经启用 YouTube Data API v3。
 3. 打开 **API 和服务 > 凭据**，创建 API Key，并在条件允许时配置合适的 API 和应用限制。
 4. 把 Key 粘贴到 YouTube Panorama 设置中的 **YouTube Data API Key**。
 

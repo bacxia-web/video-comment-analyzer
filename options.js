@@ -20,7 +20,7 @@ const YTD_OPTIONS = (() => {
       youtubeApiKeyLabel: "YouTube Data API key",
       youtubeApiHelp:
         "Used to fetch public comments and replies through the official YouTube Data API v3. ",
-      youtubeApiLink: "Enable the YouTube Data API",
+      youtubeApiLink: "Open Google Cloud credentials",
       youtubeApiHelpSuffix: " and create an API key.",
       aiProvider: "AI provider",
       providerSummaryLabel: "Supported AI provider",
@@ -93,7 +93,7 @@ const YTD_OPTIONS = (() => {
       youtubeApiKeyLabel: "YouTube Data API 密钥",
       youtubeApiHelp:
         "通过官方 YouTube Data API v3 获取公开评论和回复。",
-      youtubeApiLink: "启用 YouTube Data API",
+      youtubeApiLink: "打开 Google Cloud 凭据",
       youtubeApiHelpSuffix: "并创建 API 密钥。",
       aiProvider: "AI 服务",
       providerSummaryLabel: "支持的 AI 服务",

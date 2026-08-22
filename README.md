@@ -69,8 +69,8 @@ See the [official Supadata documentation](https://docs.supadata.ai/) if the dash
 
 ### Get a YouTube Data API key
 
-1. Open the Google Cloud page for the [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com).
-2. Choose or create a Google Cloud project, then enable the API.
+1. Open the [Google Cloud credentials page](https://console.cloud.google.com/apis/credentials?project=commentanalyse) for the `commentanalyse` project.
+2. Confirm that YouTube Data API v3 is enabled for the project.
 3. Open **APIs & Services > Credentials**, create an API key, and apply appropriate API and application restrictions where practical.
 4. Paste it into **YouTube Data API key** in YouTube Panorama Settings.
 

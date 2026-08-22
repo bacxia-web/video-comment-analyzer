@@ -20,7 +20,7 @@ test("manifest uses minimized install-time permissions", () => {
     manifest.host_permissions.includes("https://www.googleapis.com/*"),
   );
   assert.equal(Object.hasOwn(manifest, "optional_host_permissions"), false);
-  assert.equal(manifest.version, "1.2.0");
+  assert.equal(manifest.version, "1.2.1");
 });
 
 test("release copy documents current scope without em dashes", () => {
