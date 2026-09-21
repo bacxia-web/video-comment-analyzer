@@ -1,7 +1,7 @@
 /**
  * SIDE PANEL LOGIC
  *
- * Handles the UI for YouTube Panorama: video detection, transcript analysis,
+ * Handles the UI for Video & Comment Analyzer: video detection, transcript analysis,
  * rendering results, and export features.
  */
 
@@ -471,7 +471,7 @@ async function checkCurrentTab() {
       if (tabs[0]) tab = tabs[0];
     }
 
-    debugLog("[YouTube Panorama Panel] Found tab:", tab?.id, tab?.url);
+    debugLog("[Video & Comment Analyzer Panel] Found tab:", tab?.id, tab?.url);
 
     if (!tab?.url) {
       showState("welcome");
@@ -492,7 +492,7 @@ async function checkCurrentTab() {
           action: "relayToContent",
           payload: { action: "getVideoInfo" },
         });
-        debugLog("[YouTube Panorama Panel] getVideoInfo result:", result);
+        debugLog("[Video & Comment Analyzer Panel] getVideoInfo result:", result);
         if (result.success && result.response) {
           currentVideoTitle = result.response.title || "";
           currentChannelName = result.response.channelName || "";
@@ -500,7 +500,7 @@ async function checkCurrentTab() {
           currentVideoDuration = result.response.duration || 0;
         }
       } catch (e) {
-        console.error("[YouTube Panorama Panel] getVideoInfo error:", e);
+        console.error("[Video & Comment Analyzer Panel] getVideoInfo error:", e);
         currentVideoTitle = "";
         currentChannelName = "";
         currentVideoDescription = "";
@@ -693,7 +693,7 @@ function renderAnalysisResults(analysis) {
     `;
     li.addEventListener("click", () => {
       debugLog(
-        "[YouTube Panorama Panel] Chapter clicked:",
+        "[Video & Comment Analyzer Panel] Chapter clicked:",
         chapter.timestamp,
         chapter.timestampSeconds,
       );
@@ -734,7 +734,7 @@ function renderAnalysisResults(analysis) {
     `;
     div.addEventListener("click", () => {
       debugLog(
-        "[YouTube Panorama Panel] Quote clicked:",
+        "[Video & Comment Analyzer Panel] Quote clicked:",
         quote.timestamp,
         quote.timestampSeconds,
       );
@@ -798,7 +798,7 @@ async function saveQuoteAsNote(quote, btn) {
       // Refresh notes list if on Notes tab
       loadNotes(currentVideoId);
     } else {
-      console.error("[YouTube Panorama] Save quote as note failed:", result.error);
+      console.error("[Video & Comment Analyzer] Save quote as note failed:", result.error);
       btn.textContent = "Error";
       setTimeout(() => {
         btn.textContent = originalText;
@@ -806,7 +806,7 @@ async function saveQuoteAsNote(quote, btn) {
       }, 1500);
     }
   } catch (error) {
-    console.error("[YouTube Panorama] Save quote as note error:", error);
+    console.error("[Video & Comment Analyzer] Save quote as note error:", error);
     btn.textContent = "Error";
     setTimeout(() => {
       btn.textContent = originalText;
@@ -923,7 +923,7 @@ function exportTranscript() {
 
   exportText += `TRANSCRIPT:\n\n${transcriptContent}\n`;
   exportText += `\n${"—".repeat(60)}\n`;
-  exportText += `Exported by YouTube Panorama\n`;
+  exportText += `Exported by Video & Comment Analyzer\n`;
 
   const filename = `${sanitizeFilename(currentVideoTitle)}-transcript.txt`;
   downloadTextFile(exportText, filename);
@@ -1044,7 +1044,7 @@ async function triggerAnalysis() {
     // Save to cache now that we have analysis
     await saveToCache(currentVideoId);
   } catch (error) {
-    console.error("[YouTube Panorama Panel] Analysis error:", error);
+    console.error("[Video & Comment Analyzer Panel] Analysis error:", error);
     if (chapterList)
       chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">Error: ${escapeHtml(error.message)}</li>`;
   }
@@ -1417,9 +1417,9 @@ async function saveCommentCache(sampleSize = null) {
 // ============================================================
 
 async function seekTo(seconds) {
-  debugLog("[YouTube Panorama Panel] seekTo called with:", seconds);
+  debugLog("[Video & Comment Analyzer Panel] seekTo called with:", seconds);
   if (seconds === undefined || seconds === null) {
-    debugLog("[YouTube Panorama Panel] seekTo aborted - no seconds value");
+    debugLog("[Video & Comment Analyzer Panel] seekTo aborted - no seconds value");
     return;
   }
 
@@ -1433,11 +1433,11 @@ async function seekTo(seconds) {
     if (youtubeTabId) {
       try {
         await chrome.tabs.sendMessage(youtubeTabId, payload);
-        debugLog("[YouTube Panorama Panel] seekTo direct success");
+        debugLog("[Video & Comment Analyzer Panel] seekTo direct success");
         return;
       } catch (directErr) {
         debugLog(
-          "[YouTube Panorama Panel] Direct seekTo failed, falling back to relay:",
+          "[Video & Comment Analyzer Panel] Direct seekTo failed, falling back to relay:",
           directErr.message,
         );
       }
@@ -1448,9 +1448,9 @@ async function seekTo(seconds) {
       action: "relayToContent",
       payload,
     });
-    debugLog("[YouTube Panorama Panel] seekTo relay result:", result);
+    debugLog("[Video & Comment Analyzer Panel] seekTo relay result:", result);
   } catch (error) {
-    console.error("[YouTube Panorama Panel] seekTo error:", error);
+    console.error("[Video & Comment Analyzer Panel] seekTo error:", error);
   }
 }
 
@@ -1792,7 +1792,7 @@ async function evictOldCacheEntries(maxEntries) {
       .map((e) => e.key);
     if (toRemove.length > 0) {
       await chrome.storage.local.remove(toRemove);
-      debugLog(`[YouTube Panorama] Evicted ${toRemove.length} old cache entries`);
+      debugLog(`[Video & Comment Analyzer] Evicted ${toRemove.length} old cache entries`);
     }
   } catch (error) {
     console.error("Cache eviction error:", error);
@@ -1854,7 +1854,7 @@ async function loadNotes(videoId) {
       renderNotes(result.notes, videoId);
     }
   } catch (error) {
-    console.error("[YouTube Panorama Panel] Load notes error:", error);
+    console.error("[Video & Comment Analyzer Panel] Load notes error:", error);
   }
 }
 
@@ -1975,7 +1975,7 @@ async function deleteNote(noteId) {
       noteId: noteId,
     });
   } catch (error) {
-    console.error("[YouTube Panorama Panel] Delete note error:", error);
+    console.error("[Video & Comment Analyzer Panel] Delete note error:", error);
   }
 }
 
@@ -2151,7 +2151,7 @@ async function loadGlobalLanguageState() {
       );
     }
   } catch (error) {
-    console.warn("[YouTube Panorama] Could not load language preferences:", error);
+    console.warn("[Video & Comment Analyzer] Could not load language preferences:", error);
   }
   setGlobalLanguageModeButtons(currentLanguageMode);
 }
@@ -2181,7 +2181,7 @@ async function handleGlobalLanguageModeChange(mode) {
   chrome.storage.local
     .set({ [LANGUAGE_MODE_STORAGE_KEY]: mode })
     .catch((error) =>
-      console.warn("[YouTube Panorama] Could not save language preference:", error),
+      console.warn("[Video & Comment Analyzer] Could not save language preference:", error),
     );
 
   renderAllLocalizedContent();
@@ -2317,7 +2317,7 @@ async function persistUiTranslationCache() {
       [UI_TRANSLATION_STORAGE_KEY]: Object.fromEntries(recentEntries),
     });
   } catch (error) {
-    console.warn("[YouTube Panorama] Could not save UI translations:", error);
+    console.warn("[Video & Comment Analyzer] Could not save UI translations:", error);
   }
 }
 

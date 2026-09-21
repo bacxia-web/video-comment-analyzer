@@ -30,9 +30,9 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
 fi
 
 mkdir -p "$dist_dir"
-temporary_dir="$(mktemp -d "$dist_dir/.youtube-panorama-package.XXXXXX")"
-temporary_zip="$temporary_dir/youtube-panorama.zip"
-output_zip="$dist_dir/youtube-panorama-v$version.zip"
+temporary_dir="$(mktemp -d "$dist_dir/.video-comment-analyzer-package.XXXXXX")"
+temporary_zip="$temporary_dir/video-comment-analyzer.zip"
+output_zip="$dist_dir/video-comment-analyzer-v$version.zip"
 
 cleanup() {
   if [[ -f "$temporary_zip" ]]; then

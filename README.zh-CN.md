@@ -1,4 +1,4 @@
-# Panorama · 内容与评论分析
+# Video & Comment Analyzer
 
 ## 项目介绍
 
@@ -12,7 +12,7 @@
 
 ## 安装
 
-1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/youtube-panorama/main/releases/youtube-panorama-v2.0.0.zip)，解压到一个长期保留的文件夹。
+1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/video-comment-analyzer/main/releases/video-comment-analyzer-v2.0.1.zip)，解压到一个长期保留的文件夹。
 2. 在 Chrome 地址栏打开 `chrome://extensions`。
 3. 开启右上角的「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。

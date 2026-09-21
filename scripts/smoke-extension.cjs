@@ -16,7 +16,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}/`;
-    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '2.0.0');
+    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '2.0.1');
     await worker.evaluate(() => {
       const originalFetch = fetch;
       globalThis.fixtureRequests = [];

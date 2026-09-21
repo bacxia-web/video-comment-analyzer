@@ -1,6 +1,6 @@
 # 隐私说明
 
-Panorama 是用户自行配置服务 Key 的 Chrome 扩展，没有开发者运营的数据服务器。
+Video & Comment Analyzer 是用户自行配置服务 Key 的 Chrome 扩展，没有开发者运营的数据服务器。
 
 ## 本地保存
 

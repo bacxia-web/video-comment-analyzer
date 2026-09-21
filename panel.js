@@ -153,7 +153,7 @@ async function run(withAnalysis) {
 function download(content, extension, type) {
   const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob);
   const link = document.createElement("a"); link.href = url;
-  link.download = `panorama-${state.context.platform}-${state.context.id}-${state.mode}.${extension}`;
+  link.download = `video-comment-analyzer-${state.context.platform}-${state.context.id}-${state.mode}.${extension}`;
   link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 $("exportData").onclick = () => {
