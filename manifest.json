@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video & Comment Analyzer",
-  "version": "2.0.3",
+  "version": "0.2.3",
   "minimum_chrome_version": "116",
   "description": "在一个侧边栏中分析 YouTube、哔哩哔哩视频字幕，以及 YouTube、小红书和雪球评论。",
   "permissions": [

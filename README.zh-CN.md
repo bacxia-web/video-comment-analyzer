@@ -12,13 +12,13 @@
 
 ## 安装
 
-1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/video-comment-analyzer/main/releases/video-comment-analyzer-v2.0.3.zip)，解压到一个长期保留的文件夹。
+1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/video-comment-analyzer/main/releases/video-comment-analyzer-v0.2.3.zip)，解压到一个长期保留的文件夹。
 2. 在 Chrome 地址栏打开 `chrome://extensions`。
 3. 开启右上角的「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
 5. 打开支持的视频或笔记详情页，点击右下角「分析」悬浮球打开面板，也可以点击浏览器工具栏里的插件图标。
 
-请保留解压后的文件夹，插件需要从中加载。
+请保留解压后的文件夹，插件需要从中加载。更新时覆盖原文件夹，在扩展管理页点击「重新加载」，再刷新已打开的网页。
 
 ## 配置
 
