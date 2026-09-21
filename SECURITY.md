@@ -1,44 +1,14 @@
-# Security Policy
+# 安全说明
 
-## Supported versions
+- 不要把真实 API Key 放入源码、提交记录、截图、问题反馈或测试数据。
+- 设置只使用 `chrome.storage.local`，后台限制为可信扩展上下文可读。网页注入函数只收到页面身份和采集参数，不收到服务 Key。
+- DeepSeek 服务地址由代码固定；没有从网页传入任意模型请求地址的入口。
+- 平台匹配校验完整主机名，避免把类似 `youtube.com.example.org` 的地址当作 YouTube。
+- 统一采集与分析消息只接受来自本扩展页面的发起者。返回结果前再次检查标签页内容身份，防止跨视频混用。
+- 页面文本、评论和模型结果均作为不可信内容处理。统一面板通过 `textContent` 渲染；评论证据必须关联到实际采集的评论 ID。
+- 字幕 URL 只允许 YouTube 的 timedtext 接口或 B 站的 HTTPS 字幕 CDN。请求有超时，不自动绕过登录或内容权限。
+- 发布使用文件白名单与凭据检查，不包含本机配置、浏览器资料或测试产物。
 
-YouTube Panorama is a small GitHub-only project. Security fixes are made on the latest code on `main` and, when releases are published, the latest GitHub release. Older snapshots are not supported.
+本地 Key 并不防御已能读取本机浏览器资料的恶意软件。请仅从可信代码来源安装扩展，并在 Google Cloud 为评论 Key 限制可用 API。
 
-## Report a vulnerability privately
-
-Do not publish vulnerability details, exposed credentials, private video information, or transcript data through a public issue or pull request. This repository does not accept public security reports.
-
-Use GitHub's private vulnerability reporting flow from this repository's **Security** tab when it is available. If the private reporting link is not visible, contact the repository owner through their GitHub profile and ask for a private reporting channel without including vulnerability details in the public message. Include the following only in the private report:
-
-- the affected version or commit;
-- the minimum steps needed to reproduce the problem;
-- the expected and observed behavior;
-- the security and privacy impact; and
-- a suggested fix, if you have one.
-
-Remove real API keys, access tokens, private URLs, transcripts, notes, and personal information. Use redacted values and public test content.
-
-There is no guaranteed response time or bug-bounty program. Please allow a reasonable period for investigation and remediation before public disclosure.
-
-## High-priority issues
-
-Examples include:
-
-- API keys or private content included in source, logs, screenshots, or release ZIPs;
-- requests to network origins outside the documented YouTube, Google APIs, Supadata, and DeepSeek hosts;
-- script or HTML injection through transcript, metadata, service errors, or model output;
-- access to browsing data outside the documented YouTube scope;
-- unintended transmission of notes, transcripts, comments, or credentials;
-- a dependency or release-workflow compromise; and
-- bypasses of local data deletion or DeepSeek configuration controls.
-
-## User security guidance
-
-- Install only from a GitHub source or release you trust.
-- Review changes and the packaged file list before loading an update.
-- Use dedicated, scoped API keys where possible and set provider spending limits.
-- Do not reuse keys from production systems.
-- Revoke keys immediately if a device, browser profile, ZIP, log, or screenshot exposes them.
-- Remember that Chrome local extension storage is not an encrypted password vault.
-
-The release tooling uses an explicit file allowlist and scans public files for common credential patterns, but automated checks cannot detect every secret.
+报告安全问题时请提供复现步骤与经过脱敏的错误信息，不要附带 API Key、Cookie 或访问令牌。

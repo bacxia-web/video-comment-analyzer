@@ -1,96 +1,28 @@
-# Privacy
+# 隐私说明
 
-Effective: July 28, 2026
+Panorama 是用户自行配置服务 Key 的 Chrome 扩展，没有开发者运营的数据服务器。
 
-YouTube Panorama is a GitHub-only, bring-your-own-key Chrome extension. It has no YouTube Panorama account, developer-operated backend, analytics, advertising, or telemetry.
+## 本地保存
 
-## Data the extension handles
+DeepSeek、YouTube Data API、Supadata Key 保存于本机扩展的 `chrome.storage.local`，不使用 Chrome 同步存储。后台将此存储限制为 `TRUSTED_CONTEXTS`，普通网页和内容脚本无法读取。
 
-Depending on the feature you use, YouTube Panorama handles:
+Key 不会写入源码、导出内容或 GitHub。它们不是经过独立密码加密的保险库数据；有权访问本机浏览器资料的人可能读取本地存储。
 
-- the canonical URL and video ID of the active YouTube video;
-- transcript text and timestamps;
-- video metadata such as title, channel, description, and duration;
-- text you select in the transcript and nearby transcript context;
-- transcript context around a timestamped note;
-- content you ask to translate;
-- public YouTube comments, replies, author display names, like counts, and publication timestamps that you explicitly fetch;
-- notes you save;
-- Supadata, Google YouTube Data API, and DeepSeek configuration, including API keys; and
-- cached transcript, digest, comment-analysis, and translation results.
+统一面板的字幕、评论和分析结果保留在内存中，关闭面板后不保留。用户主动导出的 Markdown / JSON 文件可能包含公开评论者昵称和评论原文。保留的旧版 YouTube 学习工具会在扩展本地存储保存笔记、摘要和翻译缓存。
 
-## Where data goes
+## 向外部服务发送什么
 
-### Supadata
+- **DeepSeek**：仅在用户点击分析时发送当前采集的字幕或评论样本、内容标题和创作者信息，以及用户输入的 DeepSeek Key 用于鉴权。旧版学习工具中的翻译、解释、笔记整理也会调用 DeepSeek。
+- **Google YouTube Data API**：采集 YouTube 评论时发送视频 ID、分页参数和用户配置的 Google Key。
+- **Supadata**：只有配置了该可选服务，并且原生 YouTube 字幕不可用时，统一面板才发送不含追踪参数的标准视频 URL 和 Supadata Key。旧版学习工具直接使用 Supadata 获取字幕。字幕请求使用 `mode=native`。
+- **YouTube / 哔哩哔哩**：读取网站原生字幕。B 站请求当前视频信息、当前分 P 的字幕列表及字幕内容，沿用用户在网站的登录状态，不提取或导出 Cookie。
+- **小红书**：在当前笔记页面自动滚动、展开回复并读取可见评论，正常页面加载可能触发网站自己的请求。
+- **雪球**：使用当前网站登录会话请求当前帖子的评论接口。
 
-YouTube Panorama sends the canonical YouTube video URL to `https://api.supadata.ai` with your Supadata API key. Supadata returns the transcript and timestamps. A Supadata key is required for transcript retrieval.
+不向 DeepSeek、Google 或 Supadata 发送用户的网站 Cookie。API Key 不会传入执行于网页中的采集函数。没有遥测、广告追踪或后台自动分析。
 
-### Google YouTube Data API
+## 控制与删除
 
-When you choose **Fetch comments**, YouTube Panorama sends the active video ID and your Google API key to `https://www.googleapis.com/youtube/v3`. Google returns public comment threads and replies. The extension requests additional reply pages when a thread response is incomplete and stops after 1,000 collected items per video.
+设置页面可修改或清除 API Key；卸载插件可以清除该扩展的本地存储。下载的导出文件需要用户自行删除。网站登录由各网站管理，不受清除插件 Key 操作影响。
 
-Comment data is not sent to DeepSeek until you choose **Analyze with AI** or switch the global content language to **中文** or **双语** after fetching comments.
-
-### DeepSeek
-
-The published version sends AI feature content to DeepSeek V4 Flash at `https://api.deepseek.com`:
-
-- transcript plus relevant title, channel, description, or duration for an overview;
-- selected text plus nearby transcript context for an explanation;
-- small semantic transcript batches currently needed for progressive Chinese translation;
-- visible overview fields, public comment text and analysis, and saved note text when you switch the global content language to **中文** or **双语**;
-- nearby transcript context and video metadata when polishing a saved note;
-- up to 400 sampled public comments, comment IDs, like counts, and reply status when you explicitly request comment analysis.
-
-The endpoint and `deepseek-v4-flash` model are fixed in the published Settings page. You provide one DeepSeek API key. To use another provider or model, you must adapt your own local source copy and its permissions. The Settings page provides a coding-agent prompt for that purpose and warns you never to include an API key in the prompt or chat.
-
-Requests go directly from the extension to Google, Supadata, or DeepSeek. They are authenticated with the keys you supply. YouTube Panorama's developer does not proxy or receive these requests.
-
-Those services process data under their own terms, privacy policies, retention practices, and account settings. Do not send confidential, personal, or regulated content unless their terms and your obligations permit it.
-
-## Local storage and retention
-
-YouTube Panorama uses Chrome's local extension storage, not a YouTube Panorama cloud service.
-
-- Supadata, Google, and DeepSeek settings and API keys remain on the device in Chrome's extension storage.
-- Saved notes remain until you delete them or remove/clear the extension's data. The extension keeps up to 100 notes.
-- Recent transcript, digest, per-segment transcript translations, and global-view translations are stored locally. Digest entries are limited to 20 videos and entries older than 30 days are removed when the side panel opens. Global-view translations are separately capped by entry count and storage size.
-- Recent comment statistics, top comments, and validated AI analyses are cached locally for up to 20 videos. Full fetched comment collections are kept only in the active side-panel session.
-
-Chrome extension storage is not a password vault. Anyone with sufficient access to your browser profile or device may be able to recover locally stored keys or content. Use scoped keys where providers support them, set spending limits, and rotate or revoke a key if the device or browser profile is compromised.
-
-To remove data:
-
-- delete individual saved notes in YouTube Panorama;
-- use the Options page to clear cached digests, delete all notes, or reset all extension data;
-- remove the extension or clear its stored data from Chrome to delete all local settings, keys, notes, and cache entries; and
-- revoke keys in the Google Cloud, Supadata, or DeepSeek dashboard to stop their future use.
-
-Clearing local data does not delete information already processed or retained by Google, Supadata, or DeepSeek. Use each service's controls for service-side requests.
-
-## Permissions
-
-YouTube Panorama uses Chrome permissions for these purposes:
-
-- `sidePanel`: display the YouTube Panorama interface beside YouTube.
-- `storage`: store settings, keys, notes, and cached results locally.
-- `tabs`: identify and interact with the active YouTube tab.
-- `scripting`: coordinate the extension's YouTube page controls.
-- YouTube host access: read the active video's URL and metadata and provide timestamp controls.
-- Supadata host access: retrieve transcripts.
-- DeepSeek host access: provide AI overviews, comment analysis, explanations, translation, and note polishing through DeepSeek V4 Flash.
-- Google APIs host access: retrieve public YouTube comments and replies through YouTube Data API v3.
-
-YouTube Panorama does not use these permissions to monitor general browsing activity.
-
-## No sale or advertising use
-
-YouTube Panorama does not sell personal information, build advertising profiles, or share data with data brokers. It does not include analytics SDKs.
-
-## Changes
-
-Privacy-relevant changes will be documented in this file and in the repository history. Review updates before installing a new version.
-
-## Questions
-
-This repository does not provide a public support or issue channel. Review this policy, the source code, and each provider's documentation before using the extension. For a vulnerability or accidental secret exposure, follow the private process in [SECURITY.md](SECURITY.md).
+第三方 API 的数据保留与收费政策以服务商的说明为准。仅采集按钮不会发送内容给 DeepSeek，但 YouTube 评论 API 或配置过的备用字幕服务仍可能消耗相应服务额度。

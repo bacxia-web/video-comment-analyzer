@@ -1,243 +1,85 @@
-# YouTube Panorama
+# Panorama · 内容与评论分析
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+把三个项目合并为一个 Chrome 扩展，在同一个侧边栏里分析视频字幕和评论。项目暂用 **Panorama**，仓库地址继续保留 `youtube-panorama`，后续可统一更名。
 
-Turn every YouTube video into a resource for deep learning. YouTube Panorama brings transcripts, public comment research, bilingual translation, AI overviews, explanations, and timestamped notes into one Chrome side panel, so you can study both the video and its audience response without losing your place.
+## 支持什么
 
-- Turn captions into a readable, searchable learning resource.
-- Switch the whole learning view between Original, Simplified Chinese, and bilingual mode. The choice applies to transcripts, overviews, comment content and analysis, and saved notes.
-- Build understanding with an AI overview, chapters, key quotes, and selected-text explanations.
-- Fetch public YouTube comments and replies, inspect deterministic audience statistics, and analyze discussion topics, sentiment, recurring questions, and creator takeaways.
-- Navigate long videos by clicking timestamps in the transcript, overview, or notes.
-- Save polished timestamped notes for later study.
-- Keep control of your data with your own API keys, local Chrome storage, and no analytics or telemetry.
+| 平台 | 视频内容 | 评论内容 | 获取方式 |
+| --- | --- | --- | --- |
+| YouTube | 支持 | 支持 | 原生字幕 / 页面逐字稿；评论使用 YouTube Data API v3 |
+| 哔哩哔哩 | 支持普通视频与当前分 P | 暂未接入 | 使用网站原生字幕 |
+| 小红书 | 暂未接入 | 支持 | 复用原项目的页面滚动、展开回复、提取与去重流程 |
+| 雪球 | 暂未接入 | 保留支持 | 使用当前登录会话读取评论接口 |
 
-YouTube Panorama is a bring-your-own-key project installed locally from GitHub. It is not available through the Chrome Web Store, does not include API credits, and does not run a developer-operated server.
+视频分析生成带时间戳的章节摘要、关键引用，点击时间可跳转播放位置。评论分析生成主题、情绪、代表评论、常见问题和创作者建议。可以查看、导出原始内容和 Markdown 分析报告。
 
-This is an independent derivative of [YouTube Digest](https://github.com/zarazhangrui/youtube-digest), expanded with YouTube comment collection and audience analysis. It retains the upstream MIT license and attribution and is not an official YouTube product.
+**视频内容分析基于字幕，不识别画面，也不对无字幕视频做语音转写。** 评论最多采集 1,000 条，最多选择 400 条进行分析，优先保留高赞评论并兼顾采集顺序。结果会显示实际采集数与分析样本数，不能视作全部观众的意见。
 
-## Install with your coding agent
+## 安装步骤
 
-You do not need to understand the code or use the command line. Send this message to your coding agent:
+1. [下载 v2.0.0 安装包](https://raw.githubusercontent.com/bacxia-web/youtube-panorama/main/releases/youtube-panorama-v2.0.0.zip)，解压到一个长期保留的文件夹。也可以[下载完整源码](https://github.com/bacxia-web/youtube-panorama/archive/refs/heads/main.zip)。
+2. 在 Chrome 地址栏输入 `chrome://extensions`。
+3. 打开右上角的「开发者模式」。
+4. 点击「加载已解压的扩展程序」，选择**直接包含 `manifest.json` 的文件夹**。不能选择 ZIP 文件本身，也不要选多一层的父文件夹。
+5. 点击浏览器工具栏的拼图图标，将 **Panorama · 内容与评论分析** 固定到工具栏。
+6. 安装时打开的设置页会弹出首次配置对话框，只需填写 **DeepSeek API Key**。输入框旁有可直接点击的[申请 Key 链接](https://platform.deepseek.com/api_keys)。也可以先跳过，第一次分析时再填写。
 
-> Download or clone this project into a permanent folder I choose, tell me its exact full path, and use that same folder for Chrome's Load unpacked step. If I need a suggestion during this first installation, offer `~/Documents/youtube-panorama` on macOS or Linux, or `%USERPROFILE%\Documents\youtube-panorama` on Windows, but do not assume either path. Walk me through installation and setup in simple terms. https://github.com/bacxia-web/youtube-panorama
+这是独立的 Chrome 扩展，不需要安装 Tampermonkey，也不依赖 Claude 浏览器扩展。
 
-Your agent should:
+请保留解压后的文件夹，Chrome 会从该文件夹加载插件。移动或删除文件夹后，需要从新位置重新加载。
 
-1. Ask where you want to keep the project, download or clone it there, and tell you the exact full path. If you want a suggestion, it can offer `~/Documents/youtube-panorama` on macOS or Linux, or `%USERPROFILE%\Documents\youtube-panorama` on Windows.
-2. Open the official Supadata, Google Cloud, and DeepSeek pages below and help you create your own accounts and keys.
-3. Walk you through selecting the exact project folder you chose in Chrome with **Load unpacked**.
-4. Show you where to enter your API keys in the extension's **Settings** page.
-5. Open a YouTube video with captions and confirm the transcript and translation work.
+## 使用流程
 
-Keep this folder in the same place after installation. If you move or delete it, Chrome's unpacked extension stops working until you load the extension again from its new permanent folder.
+1. 打开要分析的页面：YouTube 视频、哔哩哔哩视频、小红书笔记详情或雪球帖子。
+2. 点击工具栏的插件图标，打开侧边栏。面板会显示当前平台和内容标题。
+3. 选择「视频内容」或「评论内容」。当前平台不支持的选项会禁用。
+4. 点击「开始分析」。插件先采集内容，再调用 DeepSeek；如果只想查看原始内容，点击「仅采集」。
+5. 查看章节、引用或评论主题。视频结果的时间按钮可以跳转到对应位置。
+6. 点击「导出分析」保存 Markdown，或「导出原始内容」保存 JSON。
 
-Never paste an API key into an AI chat, source file, screenshot, or public message. Enter keys yourself, directly in the YouTube Panorama Settings page. Your coding agent can point to the correct field without seeing the key.
+切换标签页、视频或 B 站分 P 后，面板会清除上一个页面的结果。已经发出的 API 请求可能仍会完成，但不会混入新页面。采集内容和分析结果只保留在当前面板内，关闭面板后请重新采集，重要结果请先导出。
 
-## Install manually
+### YouTube 评论：额外配置一次 Google Key
 
-If you prefer to do it yourself:
+DeepSeek Key 负责分析，不能代替 Google 的评论接口凭据。首次配置仍只询问 DeepSeek Key；需要 YouTube 评论时，再进入「设置 → 按需配置」。
 
-1. Open [github.com/bacxia-web/youtube-panorama](https://github.com/bacxia-web/youtube-panorama).
-2. Choose **Code**, then **Download ZIP**.
-3. Choose a permanent folder and unzip the project there. Optional suggestions are `~/Documents/youtube-panorama` on macOS or Linux, or `%USERPROFILE%\Documents\youtube-panorama` on Windows. You may use a different folder.
-4. In Chrome, open `chrome://extensions`.
-5. Turn on **Developer mode**.
-6. Click **Load unpacked**.
-7. Select the exact project folder you chose, which must contain `manifest.json`.
-8. Pin YouTube Panorama from Chrome's Extensions menu if you want quick access.
+1. 在 Google Cloud 中创建或选择项目。
+2. [启用 YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com)。
+3. 在[凭据页面](https://console.cloud.google.com/apis/credentials)创建 API Key，API 限制选择 YouTube Data API v3。
+4. 将 Key 填入插件设置中的「YouTube Data API Key」，保存。
 
-Because this is an unpacked extension, it does not update automatically. After downloading an update or changing local files, click **Reload** on the YouTube Panorama card at `chrome://extensions`, then refresh open YouTube tabs. Moving or deleting the source folder breaks the unpacked extension until you load it again from the new location.
+插件会分页读取顶层评论，并补充接口未内嵌的回复。评论关闭、API 未启用、Key 限制不匹配或配额用完时，会显示错误提示。[官方接口说明](https://developers.google.com/youtube/v3/docs/commentThreads/list)
 
-## Set up your API keys
+### 视频字幕
 
-To use every feature, configure three keys under your own provider accounts. You can save only the keys needed for the features you use:
+- **YouTube**：优先读取播放器字幕；也可读取页面上已打开的「显示转录稿」。原生字幕接口因平台限制无法读取时，可在设置里选填 [Supadata API Key](https://dash.supadata.ai/)，作为备用字幕来源。只请求 `mode=native`，不自动调用付费语音转写。
+- **哔哩哔哩**：打开普通视频 `/video/BV…` 或 `/video/av…` 页面，按 URL 中的 `p` 参数读取当前分 P。有些字幕需要先登录 B 站。没有字幕、受限内容或接口暂时不可用时会提示，不生成虚构字幕。番剧、直播和互动视频分支尚未支持。
+- 超长字幕超过本次分析限制会明确报错，不会悄悄只分析视频开头。
 
-1. A **Supadata API key** to retrieve YouTube transcripts.
-2. A **YouTube Data API key** to retrieve public comments and replies.
-3. A **DeepSeek API key** for video overviews, comment analysis, explanations, translation, and automatic note polishing.
+### 小红书评论
 
-### Get a Supadata API key
+先登录小红书并打开笔记详情，让评论区可见，再点击采集或分析。插件会自动滚动评论区、展开部分回复、去重，并在完成后恢复滚动位置。最多执行 20 轮加载。
 
-1. Open the official [Supadata sign-up page](https://dash.supadata.ai/auth/sign-up).
-2. Create an account and complete the short onboarding flow.
-3. Supadata generates an API key automatically during onboarding.
-4. Open the [Supadata dashboard](https://dash.supadata.ai/) whenever you need to find or manage the key.
-5. Copy the key and paste it into **Supadata API key** in YouTube Panorama Settings.
+只分析页面成功加载的评论，不保证抓到全部评论。页面改版、登录限制、折叠回复或加载失败都可能影响数量。当前不统计小红书评论的楼层关系。
 
-See the [official Supadata documentation](https://docs.supadata.ai/) if the dashboard flow changes.
+## 修改 API Key
 
-### Get a YouTube Data API key
+点击侧边栏右上角「设置」，修改 DeepSeek Key 后点击「保存设置」。服务地址和模型已内置，无需填写。默认使用 `deepseek-flash`，参照 [DeepSeek 官方文档](https://api-docs.deepseek.com/zh-cn/)。YouTube 和 Supadata 凭据放在折叠的可选配置中。
 
-1. Open the [Google Cloud credentials page](https://console.cloud.google.com/apis/credentials?project=commentanalyse) for the `commentanalyse` project.
-2. Confirm that YouTube Data API v3 is enabled for the project.
-3. Open **APIs & Services > Credentials**, create an API key, and apply appropriate API and application restrictions where practical.
-4. Paste it into **YouTube Data API key** in YouTube Panorama Settings.
+Key 只存于本机的 `chrome.storage.local`，普通网页和内容脚本不能读取。Key 不会写入源码、导出文件或上传到 GitHub。分析请求会将选中的字幕或评论及标题发送至 DeepSeek；相关费用由你的服务账户承担。详情见 [隐私说明](PRIVACY.md)。
 
-Comment requests use your Google Cloud project's YouTube Data API quota. The extension fetches up to 1,000 comments and replies per video. Disabled comments, private videos, key restrictions, and exhausted quota can prevent retrieval.
+## 从旧版迁移
 
-### Get a DeepSeek API key
+- 已加载 `youtube-panorama` 的用户：在原文件夹更新代码，然后在 `chrome://extensions` 点击「重新加载」。保持同一文件夹可以延续原扩展设置。刷新已经打开的视频页面。
+- 原版 Panorama 的 DeepSeek、Google、Supadata 配置会继续复用。旧版自定义服务商的 AI Key 不会被发送给 DeepSeek。
+- 原来的小红书插件和油猴脚本属于不同扩展，Chrome 不允许自动读取它们的 Key，需要在统一插件重新填写。完成迁移后可停用旧插件，避免重复界面。
+- YouTube 原来的双语逐字稿、划词解释与笔记功能保留在「打开 YouTube 学习工具」入口中；该旧版工作流仍需要 Supadata Key。
 
-1. Open the official [DeepSeek API Keys page](https://platform.deepseek.com/api_keys).
-2. Sign in or create a DeepSeek Platform account when prompted.
-3. Choose **Create new API key**, give it a recognizable name such as `YouTube Panorama`, and create it.
-4. Copy the key immediately. The full key may only be shown once.
-5. Paste it into **DeepSeek API key** in YouTube Panorama Settings.
-6. If DeepSeek reports insufficient balance, add credit in your DeepSeek Platform account and try again.
+合并来源：[Xiaohongshu-Comment-analysis](https://github.com/bacxia-web/Xiaohongshu-Comment-analysis)、[YouTube-Comment-analysis](https://github.com/bacxia-web/YouTube-Comment-analysis)、[youtube-panorama](https://github.com/bacxia-web/youtube-panorama)。后续统一在本仓库维护。
 
-See the [official DeepSeek API documentation](https://api-docs.deepseek.com/) for current account and API details.
+## 开发与打包
 
-Open **Settings** from the side panel. You can also open the YouTube Panorama **Options** page from its card at `chrome://extensions` or by right-clicking its toolbar icon. Paste keys only into these Settings fields. Never paste a key into an AI chat, repository file, screenshot, or public message.
-
-The published version supports DeepSeek V4 Flash as its only AI provider:
-
-```text
-Base URL: https://api.deepseek.com
-Model: deepseek-v4-flash
-```
-
-YouTube Panorama sends every DeepSeek request in non-thinking mode for responsive, predictable interactions. The endpoint and model are fixed in Settings, so the only AI credential you enter is your DeepSeek API key. To use another provider or model, copy the safe customization prompt in Settings and give it to a coding agent for your local copy. Never add an API key to that prompt or chat.
-
-Keys and settings are stored in Chrome's local extension storage on your device. Release builds do not include or use `config.js`.
-
-## Use YouTube Panorama
-
-1. Open a standard YouTube watch page with captions.
-2. Click the YouTube Panorama extension icon to open the side panel.
-3. Open **Comments**, then choose **Fetch comments** to load public comments and replies through the official API.
-4. Review the exact comment count, top-level/reply split, unique author count, and top comments. Choose **Analyze with AI** when you want topic and sentiment analysis.
-5. Read the timestamped transcript, or choose **Original**, **中文**, or **双语**.
-6. Open **Overview** when you want AI-generated chapters and key quotes.
-7. Select transcript text when you want an AI explanation.
-8. Save a note from the player or a key quote, then revisit it from **Notes**.
-
-## What works today
-
-- Google Chrome 116 or newer, using the Side Panel API.
-- Standard `youtube.com/watch` video pages.
-- Native subtitle tracks returned by Supadata. YouTube Panorama prefers English when available, but may show another native language.
-- A top-right Original, Simplified Chinese, and bilingual switch shared by transcripts, overviews, comments, and notes.
-- Public top-level comments and replies fetched through YouTube Data API v3, capped at 1,000 items per video.
-- Deterministic comment statistics, high-like comment browsing, and explicit on-demand AI analysis of up to 400 sampled comments.
-- Comment topic clustering, overall sentiment, recurring viewer questions, creator takeaways, and source-verified evidence comments.
-- AI overviews, selected-text explanations, translation, and automatic note polishing.
-- Local notes and a local cache for recent transcript and digest results.
-- DeepSeek V4 Flash for all published AI features. Other providers require a local code adaptation and are not supported by this published version.
-
-Shorts, live streams, and private or access-restricted videos may not work. Transcript features require an available native transcript. Comment features can still work on a standard watch page without a transcript, but cannot retrieve comments that are disabled or unavailable through the YouTube Data API. Firefox, Safari, mobile browsers, and other Chromium browsers are not currently tested or supported.
-
-YouTube Panorama forces Supadata's `mode=native`. It does not request AI-generated transcripts or perform local audio transcription when native captions are unavailable.
-
-## Supadata free tier and request costs
-
-Current as of August 9, 2026, the [Supadata pricing page](https://supadata.ai/pricing) lists a free tier with **100 credits per month**, no credit card required. Unused credits do not roll over. Supadata pricing can change, so check the current page before relying on these numbers.
-
-The [Supadata transcript documentation](https://docs.supadata.ai/get-transcript) describes the transcript request modes and credit behavior:
-
-- A native transcript request uses **1 credit**, regardless of video duration.
-- A generated transcript costs **2 credits per video minute**. YouTube Panorama does not use this path because it forces `mode=native`.
-- An unavailable native lookup returned as HTTP `206` still uses **1 credit**.
-
-With the current native-only behavior, the free tier can cover roughly 100 transcript lookups per month when each request succeeds once. Retries and unavailable-caption lookups also consume credits, so actual successful-video coverage can be lower.
-
-DeepSeek usage is separate from Supadata. DeepSeek may apply its own free quota, rate limits, or charges. YouTube Panorama does not collect payments or resell access. Set spending limits and monitor both accounts. The estimate below explains the current DeepSeek translation cost.
-
-## DeepSeek V4 Flash translation cost estimate
-
-Current as of August 10, 2026, DeepSeek lists the following prices per 1 million tokens on its official [pricing page](https://api-docs.deepseek.com/quick_start/pricing/):
-
-- Cache-hit input: **$0.0028 USD**.
-- Cache-miss input: **$0.14 USD**.
-- Output: **$0.28 USD**.
-
-DeepSeek says these prices may increase soon, so check the current pricing page before relying on this estimate. Its official [token usage guide](https://api-docs.deepseek.com/quick_start/token_usage/) estimates about 0.3 token per English character and about 0.6 token per Chinese character. Its [context caching guide](https://api-docs.deepseek.com/guides/kv_cache/) explains the automatic best-effort disk cache used for repeated prefixes.
-
-A measured 20-minute English talk contained **2,935 spoken English words** and 15,433 transcript characters. With YouTube Panorama's current grouping, it became 128 semantic segments and 43 requests of three segments each. Repeated prompts and JSON brought the rendered input to about 108,528 English characters, or **about 32,600 input tokens** using DeepSeek's 0.3 token per English character heuristic. The translated Chinese JSON output is estimated at about 3,500 to 4,500 tokens using the 0.6 token per Chinese character heuristic, plus JSON and ID overhead.
-
-If all input is billed as cache miss, input costs about $0.0046 and output costs about $0.0010 to $0.0013, for a total of about $0.0056 to $0.0059. When much of the repeated system prompt hits DeepSeek's automatic best-effort cache, a realistic lower end is about $0.002 to $0.003. A practical estimate for fully translating this talk is therefore **$0.002 to $0.006 USD, about ¥0.02 to ¥0.04**.
-
-Translation is lazy and progressive. Cached segments are reused, and only rows you request by scrolling into them incur calls. Retries, provider behavior, and pricing changes can increase the final cost.
-
-## Remix it with your coding agent
-
-This is an independent remix project based on YouTube Digest. Report issues for this version in the YouTube Panorama repository rather than the original upstream project. You can also fork your own copy and ask your coding agent to fix, remix, or personalize it.
-
-YouTube Panorama uses plain HTML, CSS, and JavaScript with no build step, so it is a friendly starting point for agent-assisted projects. Ideas to try:
-
-- Add more translation languages and let each person choose a learning language.
-- Create customized summary templates for lectures, interviews, tutorials, reviews, or research talks.
-- Build a vocabulary notebook that saves a word, its sentence, meaning, and video timestamp.
-- Export notes and vocabulary to Markdown, CSV, Anki, or another study tool.
-- Add personal topic filters that highlight the chapters most relevant to a goal.
-- Add optional local-model support for a different privacy and cost tradeoff.
-- Improve accessibility with keyboard navigation, font controls, and higher-contrast themes.
-
-Ask your agent to preserve the bring-your-own-key model, keep secrets out of source files, run the checks below, and test the remix on real videos.
-
-If you want another AI provider or model, first open the exact YouTube Panorama project folder that Chrome loaded through **Load unpacked** in your coding agent. Then open YouTube Panorama Settings and use **Copy customization prompt**. Replace the `[PROVIDER]` and `[MODEL]` placeholders before sending it. Do not include any API key in the prompt or chat. After the agent updates your local copy, enter the key yourself in the Settings field it identifies.
-
-## Privacy and data flow
-
-YouTube Panorama makes provider requests directly from the extension:
-
-1. It sends a canonical YouTube watch URL to Supadata to request the native transcript.
-2. It sends the video ID to Google YouTube Data API v3 when you explicitly fetch public comments and replies.
-3. It sends the transcript and relevant video metadata, or a sample of fetched comments, to DeepSeek when you request the corresponding AI feature.
-4. Focused features send only the content they need, such as selected text with context, small transcript batches, or visible overview, comment, and note fields requested in Chinese or bilingual mode.
-5. It stores keys, settings, notes, and recent digest, comment-analysis, and translation cache entries locally in Chrome.
-
-There is no YouTube Panorama account system, advertising, analytics, or telemetry. Google, Supadata, and DeepSeek still receive data under their own terms and privacy policies. See [PRIVACY.md](PRIVACY.md) for details.
-
-## Troubleshooting
-
-### The Digest button is missing on a YouTube video
-
-- At `chrome://extensions`, find YouTube Panorama and click **Reload**, then refresh the YouTube tab.
-- Confirm that you are on a standard `https://www.youtube.com/watch?...` page, not a Short, embed, or live page.
-- The current version automatically follows YouTube when its responsive action bar changes. Wait a moment after the page finishes loading.
-- If you have an older downloaded copy, resizing the YouTube window horizontally once may reveal the button. Then download the latest version so resizing is no longer required.
-- If it is still missing, ask your coding agent to inspect the content script on that exact video page.
-
-### The side panel does not open
-
-- Confirm that you are on a standard `https://www.youtube.com/watch?...` page.
-- At `chrome://extensions`, confirm YouTube Panorama is enabled and click **Reload**.
-- Refresh the YouTube tab after reloading the extension.
-- Ask your coding agent to inspect the extension if the problem continues.
-
-### YouTube Panorama asks for setup
-
-- Open **Settings** and save your Supadata, YouTube Data API, and DeepSeek keys.
-- This published version uses the fixed DeepSeek V4 Flash endpoint and model. There are no Base URL or Model fields to configure.
-- If Settings says a legacy custom provider was removed, enter a DeepSeek key. The old AI key was cleared so it could not be reused with the wrong service.
-
-### No transcript is found
-
-- Confirm the video is public and has native captions.
-- Check your Supadata key, remaining credits, rate limit, and account status.
-- Remember that unavailable native lookups and manual retries may still consume credits.
-
-YouTube Panorama will not fall back to generated transcription.
-
-### AI requests fail
-
-- A `401` or `403` usually means the DeepSeek key or account access is invalid.
-- A `429` usually means a DeepSeek rate or spending limit was reached.
-- Confirm the key was created in the DeepSeek Platform account linked above and that the account has available credit.
-- If you adapted a local copy for another model, use the Settings customization prompt again and ask your coding agent to inspect that local implementation.
-
-Never share API keys, private transcripts, or personal notes in chats, screenshots, or logs.
-
-### Comments cannot be fetched
-
-- Confirm that **YouTube Data API v3** is enabled in the Google Cloud project for your key.
-- Check API restrictions, application restrictions, and remaining YouTube Data API quota.
-- Comments may be disabled or unavailable for the video.
-- The extension deliberately stops after 1,000 fetched comments and replies per video.
-
-## Checks for coding agents
-
-Ask your coding agent to run these commands after changing the project:
+运行环境：Node.js 18+、Python 3、系统 `zip` 工具。运行插件本身不需要 Node.js。
 
 ```bash
 npm test
@@ -245,8 +87,16 @@ npm run check
 npm run package
 ```
 
-The agent should also reload the unpacked extension in Chrome and test several real YouTube videos. Automated checks do not prove that live provider requests and YouTube interactions work.
+发布包输出到 `dist/youtube-panorama-v2.0.0.zip`。解压后按上述开发者模式步骤安装。发布脚本只打包白名单中的运行文件和说明，不包含本机配置、测试数据或 API Key。
 
-## License
+浏览器集成测试可使用已安装的 Playwright：
 
-MIT. See [LICENSE](LICENSE).
+```bash
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/smoke-extension.cjs
+```
+
+测试使用独立浏览器配置和模拟平台/API 响应，不访问个人浏览器资料、不使用真实 Key，也不能替代对平台实时接口及付费分析的验证。
+
+## 项目来源与许可
+
+本项目沿用 [YouTube Digest](https://github.com/zarazhangrui/youtube-digest) 的独立衍生版本，保留上游 MIT 许可和署名。合并后增加多平台采集、统一首次配置、统一分析与导出界面。详见 [LICENSE](LICENSE)。

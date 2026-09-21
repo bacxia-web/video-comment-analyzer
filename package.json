@@ -1,8 +1,8 @@
 {
   "name": "youtube-panorama",
-  "version": "1.2.2",
+  "version": "2.0.0",
   "private": true,
-  "description": "Turn YouTube videos into learning resources with transcripts, comment analysis, bilingual translation, AI overviews, and notes.",
+  "description": "在一个侧边栏中分析 YouTube、哔哩哔哩视频字幕，以及 YouTube、小红书和雪球评论。",
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.js",

@@ -13,9 +13,10 @@ command -v zip >/dev/null 2>&1 || {
 }
 
 release_files=()
+release_list="$("$check_script" --print-files)" || exit 1
 while IFS= read -r file; do
   [[ -n "$file" ]] && release_files+=("$file")
-done < <("$check_script" --print-files)
+done <<< "$release_list"
 
 if ((${#release_files[@]} == 0)); then
   printf 'Packaging failed: release allowlist is empty\n' >&2

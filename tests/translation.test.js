@@ -63,7 +63,7 @@ function loadBackgroundHelpers({
     provider: "deepseek",
     aiApiKey: "test-key",
     aiBaseUrl: "https://api.deepseek.com",
-    aiModel: "deepseek-v4-flash",
+    aiModel: "deepseek-flash",
   },
   fetchImpl = fetch,
   setTimeoutImpl = () => 0,

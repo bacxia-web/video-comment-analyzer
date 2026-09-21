@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const settings = require("../settings.js");
 
-test("DeepSeek defaults use V4 Flash", () => {
+test("DeepSeek defaults use Flash", () => {
   const normalized = settings.normalize({
     provider: "unexpected",
     aiApiKey: "  example-key  ",
@@ -15,7 +15,7 @@ test("DeepSeek defaults use V4 Flash", () => {
 
   assert.equal(normalized.provider, "deepseek");
   assert.equal(normalized.aiBaseUrl, "https://api.deepseek.com");
-  assert.equal(normalized.aiModel, "deepseek-v4-flash");
+  assert.equal(normalized.aiModel, "deepseek-flash");
   assert.equal(normalized.aiApiKey, "example-key");
   assert.equal(normalized.supadataApiKey, "example-supadata");
   assert.equal(normalized.youtubeApiKey, "example-youtube");

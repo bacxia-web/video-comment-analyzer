@@ -1,18 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Panorama",
-  "version": "1.2.2",
+  "name": "Panorama · 内容与评论分析",
+  "version": "2.0.0",
   "minimum_chrome_version": "116",
-  "description": "Turn YouTube videos into learning resources with transcripts, comment analysis, bilingual translation, AI overviews, and notes.",
-  "permissions": ["sidePanel", "storage", "tabs", "scripting"],
+  "description": "在一个侧边栏中分析 YouTube、哔哩哔哩视频字幕，以及 YouTube、小红书和雪球评论。",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://api.supadata.ai/*",
     "https://api.deepseek.com/*",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://www.bilibili.com/*",
+    "https://bilibili.com/*",
+    "https://www.xiaohongshu.com/*",
+    "https://xiaohongshu.com/*",
+    "https://xueqiu.com/*",
+    "https://www.xueqiu.com/*"
   ],
   "action": {
-    "default_title": "Open YouTube Panorama",
+    "default_title": "打开内容与评论分析",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -20,19 +33,23 @@
     }
   },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "panel.html"
   },
   "background": {
     "service_worker": "background.js"
   },
   "options_ui": {
-    "page": "options.html",
+    "page": "preferences.html",
     "open_in_tab": true
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

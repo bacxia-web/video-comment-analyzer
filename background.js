@@ -13,7 +13,7 @@
 
 // Import safe defaults and validation helpers. Secret keys live in
 // chrome.storage.local and are never part of the extension source.
-importScripts("settings.js", "comments.js");
+importScripts("settings.js", "comments.js", "platforms.js", "collectors.js", "media-background.js");
 
 const DEBUG = false;
 const AI_PROVIDER_IDLE_TIMEOUT_MS = 50_000;
@@ -237,7 +237,7 @@ chrome.action.onClicked.addListener((tab) => {
   // Re-enable + open without awaiting — preserves user gesture context
   chrome.sidePanel.setOptions({
     tabId: tab.id,
-    path: "sidepanel.html",
+    path: "panel.html",
     enabled: true,
   });
   chrome.sidePanel.open({ tabId: tab.id });
@@ -252,26 +252,11 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === "install") chrome.runtime.openOptionsPage();
 });
 
-/**
- * Keep the side panel scoped to YouTube tabs only.
- *
- * Chrome side panels are "global" by default: once opened, the panel follows
- * you to every tab. To make YouTube Panorama behave like a YouTube-only tool, we
- * enable the panel on YouTube tabs and disable it everywhere else. Disabling
- * on a tab makes Chrome hide/close the panel for that tab, so it never lingers
- * on a new tab or some other website.
- *
- * We have to react to BOTH things that can change "what tab you're looking at":
- *   - onUpdated: the current tab navigates to a new URL
- *   - onActivated: you switch to (or open) a different tab
- * The original code only handled onUpdated, which is why the panel stayed
- * visible when switching to an already-loaded non-YouTube tab.
- */
+/** Keep the unified panel available on supported content pages. */
 function updatePanelForTab(tabId, url) {
-  const isYouTube = (url || "").startsWith("https://www.youtube.com");
-  // setOptions can reject if the tab just closed — ignore that harmlessly.
+  const supported = !!PANORAMA_PLATFORMS.parse(url);
   chrome.sidePanel
-    .setOptions({ tabId, path: "sidepanel.html", enabled: isYouTube })
+    .setOptions({ tabId, path: "panel.html", enabled: supported })
     .catch(() => {});
 }
 
@@ -418,7 +403,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (tabId) {
       chrome.sidePanel.setOptions({
         tabId,
-        path: "sidepanel.html",
+        path: "panel.html",
         enabled: true,
       });
       chrome.sidePanel
@@ -442,7 +427,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (tabs[0]) {
             chrome.sidePanel.setOptions({
               tabId: tabs[0].id,
-              path: "sidepanel.html",
+              path: "panel.html",
               enabled: true,
             });
             chrome.sidePanel.open({ tabId: tabs[0].id }).catch((err) => {
@@ -553,6 +538,7 @@ function publishCommentProgress(videoId, count, detail) {
 async function fetchYouTubeApiJson(url) {
   const response = await fetch(url.toString(), {
     headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(20000),
   });
   const data = await response.json().catch(() => ({}));
   if (response.ok && !data.error) return data;
@@ -566,6 +552,8 @@ async function fetchYouTubeApiJson(url) {
   error.code =
     reason === "commentsDisabled"
       ? "COMMENTS_DISABLED"
+      : ["quotaExceeded", "dailyLimitExceeded"].includes(reason)
+        ? "YOUTUBE_QUOTA_EXCEEDED"
       : response.status === 403
         ? "YOUTUBE_API_FORBIDDEN"
         : response.status === 400
