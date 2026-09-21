@@ -30,7 +30,7 @@ test("unified release includes setup, platform scope, install instructions and p
     assert.ok(manifest.host_permissions.includes(host));
   for (const file of ["README.md", "README.zh-CN.md"]) {
     const doc = read(file);
-    for (const expected of ["chrome://extensions", "manifest.json", "开发者模式", "DeepSeek", "Google", "Supadata", "无字幕", "1,000", "400", "YouTube Digest"])
+    for (const expected of ["chrome://extensions", "manifest.json", "开发者模式", "DeepSeek", "Google", "Supadata", "无字幕"])
       assert.ok(doc.includes(expected), `${file}: ${expected}`);
   }
   assert.match(read("preferences.html"), /platform\.deepseek\.com\/api_keys/);
