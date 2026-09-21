@@ -16,7 +16,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}/`;
-    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '2.0.2');
+    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '2.0.3');
     await worker.evaluate(() => {
       const originalFetch = fetch;
       globalThis.fixtureRequests = [];
@@ -60,7 +60,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
       if (url.hostname.endsWith('youtube.com')) body = `<h1 class="ytd-watch-metadata">YouTube fixture</h1><video></video><script>window.ytInitialPlayerResponse={videoDetails:{videoId:'${url.searchParams.get('v')}',title:'YouTube fixture',author:'Creator',lengthSeconds:'10'},captions:{playerCaptionsTracklistRenderer:{captionTracks:[{languageCode:'en',baseUrl:'https://www.youtube.com/api/timedtext?v=${url.searchParams.get('v')}'}]}}};</script>`;
       if (url.hostname === 'www.bilibili.com') body = '<h1 class="video-title">B站测试视频</h1><video></video>';
       if (url.hostname === 'www.xiaohongshu.com') body = `<div class="note-detail-mask"><h1 id="detail-title">小红书测试笔记</h1><div class="note-scroller" style="height:300px;overflow:auto"><div class="comments-container"><div class="parent-comment"><div class="comment-item" data-id="1"><div class="author"><span class="name">作者甲</span></div><div class="content"><span class="note-text">真实评论 &lt;img src=x onerror=alert(1)&gt;</span></div><div class="like"><span class="count">1.2万</span></div></div></div><div class="comment-item" data-id="2"><div class="author"><span class="name">作者乙</span></div><div class="content">第二条评论</div></div><div class="comment-item" data-id="2"><div class="content">第二条评论</div></div><div class="reply-more">展开 1 条回复</div></div></div></div><script>document.querySelector('.reply-more').onclick=()=>{const item=document.createElement('div');item.className='comment-item-sub';item.innerHTML='<div class="author"><span class="name">回复者</span></div><div class="content">新增回复</div>';document.querySelector('.comments-container').append(item);document.querySelector('.reply-more').remove();};</script>`;
-      return route.fulfill({contentType:'text/html; charset=utf-8',body:`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`});
+      const headers = url.searchParams.has('strict') ? {'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; require-trusted-types-for 'script'"} : {};
+      return route.fulfill({contentType:'text/html; charset=utf-8',headers,body:`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`});
     });
 
     const settings = await context.newPage();
@@ -70,6 +71,10 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     assert.equal(await settings.locator('#youtubeKey').isVisible(),true);
     assert.equal(await settings.locator('#deepseekKey').evaluate(input=>input.required),true);
     assert.equal(await settings.locator('#youtubeKey').evaluate(input=>input.required),false);
+    assert.match(await settings.locator('label[for=youtubeKey]').textContent(),/YouTube Data API Key.*可选/);
+    assert.match(await settings.locator('#youtubeQuota').textContent(),/10,000/);
+    await settings.locator('#optionalServices summary').click();
+    assert.match(await settings.locator('#supadataQuota').textContent(),/每月 100 积分/);
     const [signup] = await Promise.all([settings.waitForEvent('popup'),settings.getByRole('link',{name:'申请 DeepSeek API Key ↗'}).click()]);
     await signup.waitForLoadState(); assert.equal(signup.url(),'https://platform.deepseek.com/api_keys');
     assert.equal(await signup.evaluate(()=>window.opener),null); await signup.close();
@@ -93,11 +98,79 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await settings.locator('#preferencesForm button[type=submit]').click();
     await settings.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('设置已保存'));
     assert.equal((await worker.evaluate(()=>chrome.storage.local.get('ytd_settings'))).ytd_settings.aiApiKey,'fixture-updated-key');
+    await settings.locator('#optionalServices summary').click();
     await settings.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-settings.png'),fullPage:true});
     console.log('PASS settings page without dialog, required DeepSeek, optional YouTube, application link and validation');
 
+    const legacySettings = await context.newPage();
+    await legacySettings.goto(base + 'options.html');
+    await legacySettings.locator('[data-language="zh-CN"]').click();
+    assert.match(await legacySettings.locator('label[for=youtubeApiKey]').textContent(),/可选/);
+    assert.match(await legacySettings.locator('#supadataQuota').textContent(),/每月 100 积分/);
+    await legacySettings.locator('[data-language=en]').click();
+    assert.match(await legacySettings.locator('label[for=youtubeApiKey]').textContent(),/optional/);
+    assert.match(await legacySettings.locator('#youtubeQuota').textContent(),/10,000/);
+    await legacySettings.close();
+
+    const launcherPage = await context.newPage();
+    const launcherErrors = []; launcherPage.on('pageerror',error=>launcherErrors.push(error.message));
+    await launcherPage.goto('https://www.youtube.com/');
+    await launcherPage.locator('#vca-launcher').waitFor({state:'attached'});
+    assert.equal(await launcherPage.locator('#vca-open').isVisible(),false);
+    // Real SPA history change: no document reload or custom extension event.
+    await launcherPage.evaluate(()=>history.pushState({},'', '/watch?v=dQw4w9WgXcQ'));
+    await launcherPage.locator('#vca-open').waitFor({state:'visible'});
+    const bounds = await launcherPage.locator('#vca-open').boundingBox();
+    assert.ok(bounds.x > 300 && bounds.y > 800 && bounds.width === 56);
+    await launcherPage.locator('#vca-open').hover();
+    await launcherPage.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-launcher.png'),fullPage:true});
+    await worker.evaluate(()=>{
+      const originalOpen = chrome.sidePanel.open.bind(chrome.sidePanel);
+      globalThis.fixturePanelOpens = [];
+      chrome.sidePanel.open = async options => { await originalOpen(options); fixturePanelOpens.push(options); };
+    });
+    await launcherPage.locator('#vca-open').click();
+    await launcherPage.waitForFunction(()=>!document.querySelector('#vca-launcher').shadowRoot.querySelector('#vca-open').disabled);
+    assert.doesNotMatch(await launcherPage.locator('#vca-tip').textContent(),/失败/);
+    assert.equal(await worker.evaluate(()=>fixturePanelOpens.length),1);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),0,'Opening the launcher must not collect or spend credits');
+    await launcherPage.locator('#vca-open').hover();
+    await launcherPage.locator('#vca-dismiss').click();
+    assert.equal(await launcherPage.locator('#vca-open').isVisible(),false);
+    await launcherPage.evaluate(()=>history.pushState({},'', '/watch?v=abcdefghijk'));
+    await launcherPage.locator('#vca-open').waitFor({state:'visible'});
+    await launcherPage.evaluate(()=>document.getElementById('vca-launcher').remove());
+    await launcherPage.locator('#vca-open').waitFor({state:'visible'});
+    assert.equal(await launcherPage.locator('#vca-launcher').count(),1);
+    // A real user gesture enters fullscreen; the launcher must stay out of it.
+    await launcherPage.evaluate(()=>{
+      const button=document.createElement('button'); button.id='fixture-fullscreen'; button.textContent='Fullscreen';
+      button.onclick=()=>document.documentElement.requestFullscreen(); document.body.append(button);
+    });
+    await launcherPage.locator('#fixture-fullscreen').click();
+    await launcherPage.waitForFunction(()=>!!document.fullscreenElement);
+    await launcherPage.locator('#vca-open').waitFor({state:'hidden'});
+    await launcherPage.evaluate(()=>document.exitFullscreen());
+    await launcherPage.locator('#vca-open').waitFor({state:'visible'});
+    await launcherPage.evaluate(()=>history.pushState({},'', '/'));
+    await launcherPage.locator('#vca-open').waitFor({state:'hidden'});
+    await launcherPage.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ&strict=1');
+    await launcherPage.locator('#vca-open').waitFor({state:'visible'});
+    assert.equal((await launcherPage.locator('#vca-open').boundingBox()).width,56,'Launcher styles survive a strict page CSP');
+    await worker.evaluate(async()=>{
+      const tab=(await chrome.tabs.query({url:'https://www.youtube.com/watch*'}))[0];
+      await chrome.scripting.executeScript({target:{tabId:tab.id},files:['launcher.js']});
+    });
+    assert.equal(await launcherPage.locator('#vca-launcher').count(),1,'Reinjection does not duplicate the launcher');
+    await launcherPage.goto('https://example.com/watch?v=dQw4w9WgXcQ');
+    assert.equal(await launcherPage.locator('#vca-launcher').count(),0);
+    assert.deepEqual(launcherErrors,[]);
+    await launcherPage.close();
+    console.log('PASS floating launcher opens the real Chrome side panel without API calls; SPA routes, dismiss, fullscreen and unsupported pages');
+
     const page = await context.newPage();
     await page.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    await page.locator('#vca-open').waitFor({state:'visible'});
     const tabId = await worker.evaluate(async()=> (await chrome.tabs.query({url:'https://www.youtube.com/watch*'}))[0].id);
     // The test opens panel.html as a tab; simulate only the side-panel active-tab query.
     // Collection, storage, extension messaging, script worlds, and AI parsing remain real.
@@ -154,6 +227,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     console.log('PASS optional Google key, official comment API pagination/replies, source evidence and HTML escaping');
 
     await page.goto('https://www.bilibili.com/video/BV13x41117TL/?p=2');
+    await page.locator('#vca-open').waitFor({state:'visible'});
+    assert.match(await page.locator('#vca-tip').textContent(),/哔哩哔哩.*字幕/);
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='哔哩哔哩');
     assert.equal(await panel.locator('#results').isVisible(),false);
     assert.equal(await panel.locator('[data-mode=comments]').isDisabled(),true);
@@ -164,6 +239,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     console.log('PASS Bilibili current-part subtitles and video analysis in the same panel');
 
     await page.goto('https://www.xiaohongshu.com/explore/1234567890abcdef12345678');
+    await page.locator('#vca-open').waitFor({state:'visible'});
+    assert.match(await page.locator('#vca-tip').textContent(),/小红书.*评论/);
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='小红书');
     await panel.locator('#analyze').click();
     await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'),null,{timeout:30000});
@@ -186,6 +263,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     console.log('PASS panel layout at 320, 375, 414 and 768 pixels');
 
     await page.goto('https://xueqiu.com/123/456');
+    await page.locator('#vca-open').waitFor({state:'visible'});
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='雪球');
     await panel.locator('#collect').click();
     await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('采集完成'));

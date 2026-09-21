@@ -52,6 +52,7 @@
           <input
             id="supadataApiKey"
             name="supadataApiKey"
+            aria-describedby="supadataQuota"
             type="password"
             autocomplete="off"
             spellcheck="false"
@@ -71,16 +72,22 @@
               >. Supadata generates the key during onboarding.</span
             >
           </p>
+          <p class="help quota" id="supadataQuota">
+            <span data-i18n="supadataQuota">Free plan: 100 credits per month, no credit card required. Each native transcript request costs 1 credit, including requests returning no transcript. Unused credits do not roll over. This extension uses native transcripts only.</span>
+            <a href="https://supadata.ai/pricing" target="_blank" rel="noopener noreferrer" data-i18n="officialPricing">Official pricing and quota</a> ·
+            <a href="https://docs.supadata.ai/get-transcript#pricing" target="_blank" rel="noopener noreferrer" data-i18n="requestCost">Request cost</a>
+          </p>
         </section>
 
         <section class="card">
           <h2 data-i18n="commentsProvider">Comments provider</h2>
           <label for="youtubeApiKey" data-i18n="youtubeApiKeyLabel"
-            >YouTube Data API key</label
+            >YouTube Data API Key (optional)</label
           >
           <input
             id="youtubeApiKey"
             name="youtubeApiKey"
+            aria-describedby="youtubeQuota"
             type="password"
             autocomplete="off"
             spellcheck="false"
@@ -98,6 +105,11 @@
               data-i18n="youtubeApiLink"
               >Open Google Cloud credentials</a
             ><span data-i18n="youtubeApiHelpSuffix"> and create an API key.</span>
+          </p>
+          <p class="help quota" id="youtubeQuota">
+            <span data-i18n="youtubeQuota">Default free quota for comment requests: 10,000 units per day per Google Cloud project. One page of up to 100 top-level comments costs 1 unit. More pages and replies consume additional units; other API methods may share this quota.</span>
+            <a href="https://developers.google.com/youtube/v3/getting-started#quota" target="_blank" rel="noopener noreferrer" data-i18n="officialQuota">Official quota</a> ·
+            <a href="https://developers.google.com/youtube/v3/docs/commentThreads/list" target="_blank" rel="noopener noreferrer" data-i18n="requestCost">Request cost</a>
           </p>
         </section>
 
@@ -151,6 +163,7 @@
           </button>
           <span id="saveStatus" role="status" aria-live="polite"></span>
         </div>
+        <p class="help" data-i18n="quotaChecked">Quota information checked on September 21, 2026; your provider account shows the current allowance. These quotas do not cover DeepSeek AI analysis fees.</p>
       </form>
 
       <details class="card customization-card">

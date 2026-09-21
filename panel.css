@@ -58,4 +58,5 @@ input { width: 100%; padding: 10px 12px; background: var(--surface); color: var(
 .settings-main section { padding: 12px 0 24px; }
 .settings-main details { margin-top: 12px; }
 .settings-main .help { margin: 8px 0 20px; font-size: 13px; color: var(--muted); }
+.quota { margin: 12px 0 0; padding: 12px; border-left: 3px solid var(--accent); background: var(--tint); font-size: 13px; }
 @media (max-width: 360px) { main, .header { padding-left: 16px; padding-right: 16px; } }

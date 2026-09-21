@@ -1,16 +1,19 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Video &amp; Comment Analyzer 设置</title><link rel="stylesheet" href="panel.css"></head><body>
 <header class="header"><div><strong>Video &amp; Comment Analyzer</strong><span class="subtitle">设置</span></div></header>
-<main class="settings-main"><h1>配置 API Key</h1><p class="muted">请填写必填的 DeepSeek Key。YouTube 评论获取 Key 可以稍后按需添加。</p>
+<main class="settings-main"><h1>配置 API Key</h1><p class="muted">请填写必填的 DeepSeek Key。YouTube Data API Key 用于获取评论，可以稍后按需添加。</p>
 <form id="preferencesForm"><section><label for="deepseekKey">DeepSeek API Key（必填）</label><div class="key-row"><input id="deepseekKey" type="password" autocomplete="off" spellcheck="false" required><button type="button" id="reveal" aria-pressed="false">显示</button></div>
 <p class="help"><a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">申请 DeepSeek API Key ↗</a><br>服务地址和模型已内置，不需要填写。</p></section>
-<section><label for="youtubeKey">YouTube 评论获取 Key（选填）</label><input id="youtubeKey" type="password" autocomplete="off" spellcheck="false">
-<p class="help">不填也可以保存设置和使用其他功能；获取 YouTube 评论时才需要。创建 Google Cloud 项目、启用 YouTube Data API v3，然后创建 API Key。<br>
-<a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">启用 YouTube Data API v3 ↗</a> · <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">创建 API Key ↗</a></p></section>
+<section><label for="youtubeKey">YouTube Data API Key（可选，用于获取评论）</label><input id="youtubeKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="youtubeHelp youtubeQuota">
+<p id="youtubeHelp" class="help">不填也可以保存设置和使用其他功能；获取 YouTube 评论时才需要。创建 Google Cloud 项目、启用 YouTube Data API v3，然后创建 API Key。<br>
+<a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">启用 YouTube Data API v3 ↗</a> · <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">创建 API Key ↗</a></p>
+<p id="youtubeQuota" class="quota"><strong>默认免费配额：每天 10,000 单位／Google Cloud 项目。</strong><br>读取一页评论消耗 1 单位，最多返回 100 条顶层评论；翻页和补充回复会继续消耗额度。同一个项目下的其他接口也可能共用此配额。<br><a href="https://developers.google.com/youtube/v3/getting-started#quota" target="_blank" rel="noopener noreferrer">官方额度说明 ↗</a> · <a href="https://developers.google.com/youtube/v3/docs/commentThreads/list" target="_blank" rel="noopener noreferrer">评论读取用量 ↗</a></p></section>
 <details id="optionalServices"><summary>备用字幕服务（选填）</summary>
-<label for="supadataKey">Supadata API Key（可选）</label><input id="supadataKey" type="password" autocomplete="off" spellcheck="false">
-<p class="help">优先读取网站字幕；YouTube 原生字幕无法读取时，才使用此备用服务。按服务商账户计费。<br><a href="https://dash.supadata.ai/" target="_blank" rel="noopener noreferrer">获取 Supadata API Key ↗</a></p></details>
+<label for="supadataKey">Supadata API Key（可选）</label><input id="supadataKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="supadataHelp supadataQuota">
+<p id="supadataHelp" class="help">优先读取网站字幕；YouTube 原生字幕无法读取时，才使用此备用服务。<br><a href="https://dash.supadata.ai/" target="_blank" rel="noopener noreferrer">获取 Supadata API Key ↗</a></p>
+<p id="supadataQuota" class="quota"><strong>免费方案：每月 100 积分，无需信用卡。</strong><br>每次原生字幕请求消耗 1 积分，约可请求 100 次；未找到字幕的请求也可能扣除积分。额度不结转，本插件不会自动使用语音转写。<br><a href="https://supadata.ai/pricing" target="_blank" rel="noopener noreferrer">官方定价与额度 ↗</a> · <a href="https://docs.supadata.ai/get-transcript" target="_blank" rel="noopener noreferrer">字幕请求说明 ↗</a></p></details>
 <div class="actions"><button class="primary" type="submit">保存设置</button></div><p id="saveStatus" role="status"></p></form>
 <p class="muted fine">Key 只保存在此浏览器的扩展本地存储中，不会写入项目文件或同步到 GitHub。网页脚本不能读取扩展存储。</p>
+<p class="muted fine">额度信息核实于 2026-09-21，以服务商账户显示为准；以上额度不包含 DeepSeek 的 AI 分析费用。</p>
 <footer><button id="clearKeys" class="quiet">清除已保存的 Key</button><p class="muted fine">旧版 YouTube 学习工具继续使用同一份设置。</p></footer>
 </main><script src="settings.js"></script><script src="setup.js"></script><script src="preferences.js"></script></body></html>

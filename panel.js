@@ -53,7 +53,7 @@ async function refreshContext() {
 }
 function showError(result) {
   const messages = {
-    NO_YOUTUBE_KEY: "获取 YouTube 评论需要单独的 Google API Key。请在设置中填写「YouTube 评论获取 Key」（选填项，仅此功能需要）。",
+    NO_YOUTUBE_KEY: "获取 YouTube 评论需要单独的 Google API Key。请在设置中填写「YouTube Data API Key」（可选项，仅此功能需要）。",
     NO_AI_KEY: "请先在设置中填写 DeepSeek API Key。",
     INVALID_AI_KEY: "DeepSeek Key 无效，请在设置中检查。",
     RATE_LIMITED: "服务暂时限流，请稍后重试。",

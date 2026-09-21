@@ -12,11 +12,11 @@
 
 ## 安装
 
-1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/video-comment-analyzer/main/releases/video-comment-analyzer-v2.0.2.zip)，解压到一个长期保留的文件夹。
+1. [下载安装包](https://raw.githubusercontent.com/bacxia-web/video-comment-analyzer/main/releases/video-comment-analyzer-v2.0.3.zip)，解压到一个长期保留的文件夹。
 2. 在 Chrome 地址栏打开 `chrome://extensions`。
 3. 开启右上角的「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
-5. 将插件固定到工具栏。打开视频或笔记页面，点击插件图标即可开始使用。
+5. 打开支持的视频或笔记详情页，点击右下角「分析」悬浮球打开面板，也可以点击浏览器工具栏里的插件图标。
 
 请保留解压后的文件夹，插件需要从中加载。
 
@@ -27,9 +27,9 @@
 | 配置项 | 什么时候需要 | 获取方式 |
 | --- | --- | --- |
 | DeepSeek API Key | 必填，用于 AI 分析 | [申请 Key](https://platform.deepseek.com/api_keys) |
-| YouTube 评论获取 Key | 选填，仅获取 YouTube 评论时需要 | 在 Google Cloud [启用 YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com)，再[创建 Key](https://console.cloud.google.com/apis/credentials) |
+| YouTube Data API Key | 可选，仅获取 YouTube 评论时需要 | 在 Google Cloud [启用 YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com)，再[创建 Key](https://console.cloud.google.com/apis/credentials) |
 | Supadata API Key | 可选，YouTube 原生字幕无法读取时作为备用 | [获取 Key](https://dash.supadata.ai/) |
 
-YouTube 评论获取 Key 可在设置页面按需填写，Supadata Key 位于「备用字幕服务（选填）」中。小红书、雪球及部分哔哩哔哩字幕需要先登录对应网站。
+YouTube Data API Key 可在设置页面按需填写，Supadata Key 位于「备用字幕服务（选填）」中。小红书、雪球及部分哔哩哔哩字幕需要先登录对应网站。
 
 Key 保存在本机浏览器中；调用 AI 或其他 API 的费用、额度由对应服务账户承担。

@@ -39,6 +39,7 @@ public_allowlist=(
   "preferences.html"
   "preferences.js"
   "content.js"
+  "launcher.js"
   "sidepanel.html"
   "sidepanel.css"
   "sidepanel.js"

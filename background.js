@@ -392,6 +392,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "openAnalyzer") {
+    const tabId = sender.tab?.id;
+    if (sender.id !== chrome.runtime.id || !Number.isInteger(tabId) || !PANORAMA_PLATFORMS.parse(sender.tab?.url)) {
+      sendResponse({ success: false });
+      return false;
+    }
+    // Both calls start inside the original click gesture. Reply only once the
+    // panel has actually opened so the launcher can show an actionable error.
+    Promise.all([
+      chrome.sidePanel.setOptions({ tabId, path: "panel.html", enabled: true }),
+      chrome.sidePanel.open({ tabId }),
+    ]).then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false }));
+    return true;
+  }
+
   if (message.action === "openSidePanel") {
     const tabId = sender.tab?.id;
     debugLog("[Video & Comment Analyzer BG] openSidePanel requested from tab:", tabId);
