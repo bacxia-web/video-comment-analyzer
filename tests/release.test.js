@@ -20,7 +20,7 @@ test("manifest uses minimized install-time permissions", () => {
     manifest.host_permissions.includes("https://www.googleapis.com/*"),
   );
   assert.equal(Object.hasOwn(manifest, "optional_host_permissions"), false);
-  assert.equal(manifest.version, "2.0.1");
+  assert.equal(manifest.version, "2.0.2");
 });
 
 test("unified release includes setup, platform scope, install instructions and privacy", () => {
@@ -34,7 +34,6 @@ test("unified release includes setup, platform scope, install instructions and p
       assert.ok(doc.includes(expected), `${file}: ${expected}`);
   }
   assert.match(read("preferences.html"), /platform\.deepseek\.com\/api_keys/);
-  assert.match(read("setup.js"), /showModal/);
   assert.match(read("PRIVACY.md"), /TRUSTED_CONTEXTS/);
   assert.match(read("SECURITY.md"), /textContent/);
   const runtime = ["panel.js", "media-background.js", "collectors.js"].map(read).join("\n");

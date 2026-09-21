@@ -14,6 +14,7 @@ document.getElementById("preferencesForm").addEventListener("submit", async even
   button.disabled = true;
   try {
     const values = [deepseekInput.value.trim(), youtubeInput.value.trim(), supadataInput.value.trim()];
+    if (!values[0]) throw new Error("请填写必填的 DeepSeek API Key。");
     if (values.some(value => /\s/.test(value))) throw new Error("Key 不能包含空格或换行，请检查后再保存。");
     await chrome.storage.local.set({ [YTD_SETTINGS.STORAGE_KEY]: YTD_SETTINGS.normalize({
       aiApiKey: values[0], youtubeApiKey: values[1], supadataApiKey: values[2] }) });
@@ -36,6 +37,6 @@ document.getElementById("clearKeys").onclick = async () => {
   } catch { saveStatus.className = "error"; saveStatus.textContent = "清除失败，请重试。"; }
 };
 (async () => {
-  try { await loadPreferences(); if (await PANORAMA_SETUP.ensure()) await loadPreferences(); }
+  try { await loadPreferences(); }
   catch { saveStatus.className = "error"; saveStatus.textContent = "设置读取失败，请重新打开插件。"; }
 })();

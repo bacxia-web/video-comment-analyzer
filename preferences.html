@@ -1,13 +1,13 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Video &amp; Comment Analyzer 设置</title><link rel="stylesheet" href="panel.css"></head><body>
 <header class="header"><div><strong>Video &amp; Comment Analyzer</strong><span class="subtitle">设置</span></div></header>
-<main class="settings-main"><h1>连接你的服务</h1><p class="muted">日常分析只需 DeepSeek Key。其他服务按需要配置。</p>
-<form id="preferencesForm"><section><label for="deepseekKey">DeepSeek API Key</label><div class="key-row"><input id="deepseekKey" type="password" autocomplete="off" spellcheck="false"><button type="button" id="reveal" aria-pressed="false">显示</button></div>
+<main class="settings-main"><h1>配置 API Key</h1><p class="muted">请填写必填的 DeepSeek Key。YouTube 评论获取 Key 可以稍后按需添加。</p>
+<form id="preferencesForm"><section><label for="deepseekKey">DeepSeek API Key（必填）</label><div class="key-row"><input id="deepseekKey" type="password" autocomplete="off" spellcheck="false" required><button type="button" id="reveal" aria-pressed="false">显示</button></div>
 <p class="help"><a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">申请 DeepSeek API Key ↗</a><br>服务地址和模型已内置，不需要填写。</p></section>
-<details id="optionalServices"><summary>按需配置：YouTube 评论与备用字幕</summary>
-<label for="youtubeKey">YouTube Data API Key</label><input id="youtubeKey" type="password" autocomplete="off" spellcheck="false">
-<p class="help">仅分析 YouTube 评论时需要。创建 Google Cloud 项目、启用 YouTube Data API v3，然后创建 API Key。<br>
-<a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">启用 YouTube Data API v3 ↗</a> · <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">创建 API Key ↗</a></p>
+<section><label for="youtubeKey">YouTube 评论获取 Key（选填）</label><input id="youtubeKey" type="password" autocomplete="off" spellcheck="false">
+<p class="help">不填也可以保存设置和使用其他功能；获取 YouTube 评论时才需要。创建 Google Cloud 项目、启用 YouTube Data API v3，然后创建 API Key。<br>
+<a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">启用 YouTube Data API v3 ↗</a> · <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">创建 API Key ↗</a></p></section>
+<details id="optionalServices"><summary>备用字幕服务（选填）</summary>
 <label for="supadataKey">Supadata API Key（可选）</label><input id="supadataKey" type="password" autocomplete="off" spellcheck="false">
 <p class="help">优先读取网站字幕；YouTube 原生字幕无法读取时，才使用此备用服务。按服务商账户计费。<br><a href="https://dash.supadata.ai/" target="_blank" rel="noopener noreferrer">获取 Supadata API Key ↗</a></p></details>
 <div class="actions"><button class="primary" type="submit">保存设置</button></div><p id="saveStatus" role="status"></p></form>
