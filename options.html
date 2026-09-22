@@ -35,19 +35,15 @@
             </button>
           </div>
         </div>
-        <h1 data-i18n="heading">Bring your own API keys</h1>
-        <p class="lede" data-i18n="lede">
-          Keys stay in this Chrome profile and are sent only to Supadata,
-          Google, and DeepSeek. This open-source extension has no developer
-          server or analytics.
-        </p>
+        <h1 data-i18n="heading">API keys and saved data</h1>
+        <p class="lede" data-i18n="lede">Enter a DeepSeek API Key for AI analysis. Add YouTube and Supadata keys only for the features you need. Keys stay in this Chrome profile and are sent only to the corresponding service.</p>
       </header>
 
       <form id="settingsForm">
         <section class="card">
-          <h2 data-i18n="transcriptProvider">Transcript provider</h2>
+          <h2 data-i18n="transcriptProvider">YouTube subtitles</h2>
           <label for="supadataApiKey" data-i18n="supadataApiKeyLabel"
-            >Supadata API key</label
+            >Supadata API Key (optional)</label
           >
           <input
             id="supadataApiKey"
@@ -56,31 +52,32 @@
             type="password"
             autocomplete="off"
             spellcheck="false"
+            data-i18n-placeholder="keyPlaceholder"
             placeholder="Paste your Supadata key"
           />
           <p class="help">
             <span data-i18n="supadataHelp"
-              >Used to fetch timestamped YouTube subtitles.</span
+              >Used by YouTube subtitle study and as a backup when the main panel cannot read YouTube subtitles. </span
             >
             <a
               href="https://dash.supadata.ai/auth/sign-up"
               target="_blank"
               rel="noreferrer"
               data-i18n="supadataLink"
-              >Create a Supadata account and key</a
+              >Get a Supadata API Key</a
             ><span data-i18n="supadataHelpSuffix"
-              >. Supadata generates the key during onboarding.</span
+              >. Copy the key from your Supadata account and paste it above.</span
             >
           </p>
           <p class="help quota" id="supadataQuota">
-            <span data-i18n="supadataQuota">Free plan: 100 credits per month, no credit card required. Each native transcript request costs 1 credit, including requests returning no transcript. Unused credits do not roll over. This extension uses native transcripts only.</span>
+            <span data-i18n="supadataQuota">Free plan: 100 credits per month, no credit card needed. Fetching existing subtitles costs 1 credit per request, so this allows about 100 requests. Unavailable subtitles may still cost a credit. Unused credits do not carry over. This extension does not transcribe videos without subtitles. </span>
             <a href="https://supadata.ai/pricing" target="_blank" rel="noopener noreferrer" data-i18n="officialPricing">Official pricing and quota</a> ·
             <a href="https://docs.supadata.ai/get-transcript#pricing" target="_blank" rel="noopener noreferrer" data-i18n="requestCost">Request cost</a>
           </p>
         </section>
 
         <section class="card">
-          <h2 data-i18n="commentsProvider">Comments provider</h2>
+          <h2 data-i18n="commentsProvider">YouTube comments</h2>
           <label for="youtubeApiKey" data-i18n="youtubeApiKeyLabel"
             >YouTube Data API Key (optional)</label
           >
@@ -91,30 +88,31 @@
             type="password"
             autocomplete="off"
             spellcheck="false"
+            data-i18n-placeholder="keyPlaceholder"
             placeholder="Paste your Google API key"
           />
           <p class="help">
             <span data-i18n="youtubeApiHelp"
-              >Used to fetch public comments and replies through the official
-              YouTube Data API v3.</span
+              >Needed only to fetch YouTube comments and replies. Other features work without it. Select or create a Google Cloud project, then complete these steps: </span
             >
+            <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer" data-i18n="youtubeEnableLink">1. Enable YouTube Data API v3</a> ·
             <a
-              href="https://console.cloud.google.com/apis/credentials?project=commentanalyse"
+              href="https://console.cloud.google.com/apis/credentials"
               target="_blank"
               rel="noreferrer"
               data-i18n="youtubeApiLink"
-              >Open Google Cloud credentials</a
-            ><span data-i18n="youtubeApiHelpSuffix"> and create an API key.</span>
+              >2. Create an API Key</a
+            ><span data-i18n="youtubeApiHelpSuffix">. Paste the key above.</span>
           </p>
           <p class="help quota" id="youtubeQuota">
-            <span data-i18n="youtubeQuota">Default free quota for comment requests: 10,000 units per day per Google Cloud project. One page of up to 100 top-level comments costs 1 unit. More pages and replies consume additional units; other API methods may share this quota.</span>
+            <span data-i18n="youtubeQuota">Default free quota: 10,000 units per project per day. One request costs 1 unit and returns up to 100 top-level comments. More pages and replies use additional units. Other calls in the same project may share this quota. </span>
             <a href="https://developers.google.com/youtube/v3/getting-started#quota" target="_blank" rel="noopener noreferrer" data-i18n="officialQuota">Official quota</a> ·
             <a href="https://developers.google.com/youtube/v3/docs/commentThreads/list" target="_blank" rel="noopener noreferrer" data-i18n="requestCost">Request cost</a>
           </p>
         </section>
 
         <section class="card">
-          <h2 data-i18n="aiProvider">AI provider</h2>
+          <h2 data-i18n="aiProvider">AI analysis</h2>
           <div
             class="provider-summary"
             aria-label="Supported AI provider"
@@ -122,12 +120,12 @@
           >
             <span class="provider-name">DeepSeek Flash</span>
             <span class="provider-badge" data-i18n="providerBadge"
-              >Supported in this version</span
+              >Already configured</span
             >
           </div>
 
           <label for="aiApiKey" data-i18n="deepseekApiKeyLabel"
-            >DeepSeek API key</label
+            >DeepSeek API Key (required for AI)</label
           >
           <input
             id="aiApiKey"
@@ -135,26 +133,22 @@
             type="password"
             autocomplete="off"
             spellcheck="false"
+            data-i18n-placeholder="keyPlaceholder"
             placeholder="Paste your DeepSeek key"
           />
           <p class="help">
             <span data-i18n="deepseekHelp"
-              >Video &amp; Comment Analyzer uses DeepSeek Flash for overviews,
-              explanations, translation, and note polishing.</span
+              >Used for summaries, comment analysis, translation, explanations, and note cleanup. Usage is billed to your DeepSeek account. </span
             >
             <a
               href="https://platform.deepseek.com/api_keys"
               target="_blank"
               rel="noreferrer"
               data-i18n="deepseekLink"
-              >Create a DeepSeek API key</a
+              >Get a DeepSeek API Key</a
             ><span data-i18n="deepseekHelpSuffix">.</span>
           </p>
-          <div class="privacy-note" data-i18n="privacyNote">
-            When you use AI features, DeepSeek receives the video transcript
-            and relevant video context. Review DeepSeek's terms and pricing
-            before saving.
-          </div>
+          <div class="privacy-note" data-i18n="privacyNote">AI features send the relevant subtitles, comments, or selected text to DeepSeek. Saving a key stores it locally; it does not check whether the key works.</div>
         </section>
 
         <div class="form-actions">
@@ -169,25 +163,22 @@
       <details class="card customization-card">
         <summary class="customization-summary">
           <span class="customization-summary-copy">
-            <span class="eyebrow" data-i18n="localRemix">Local remix</span>
+            <span class="eyebrow" data-i18n="localRemix">Advanced</span>
             <span class="customization-title" data-i18n="customizationTitle"
-              >Want to use another AI model?</span
+              >Change the AI service (requires code changes)</span
             >
             <span
               class="customization-purpose"
               data-i18n="customizationPurpose"
-              >Edit and copy a safe prompt for your coding agent</span
+              >Optional instructions for an AI coding assistant</span
             >
           </span>
           <span class="agent-badge" data-i18n="agentBadge"
-            >Coding agent ready</span
+            >Code changes required</span
           >
         </summary>
         <div class="customization-content">
-          <p class="help customization-intro" data-i18n="customizationIntro">
-            You can edit the prompt directly. Complete these three steps before
-            copying:
-          </p>
+          <p class="help customization-intro" data-i18n="customizationIntro">You can skip this section for normal use. To change the AI service, give the instructions below to an AI coding assistant:</p>
           <ol class="customization-steps">
             <li data-i18n="customizationStepFolder">
               Open the extracted Video &amp; Comment Analyzer project folder in your coding
@@ -232,26 +223,17 @@
       </details>
 
       <section class="card data-card">
-        <h2 data-i18n="localData">Local data</h2>
-        <p class="help" data-i18n="localDataHelp">
-          Digests, comment analyses, translations, and notes are stored only in
-          this Chrome profile. You can remove them at any time.
-        </p>
+        <h2 data-i18n="localData">Saved learning data</h2>
+        <p class="help" data-i18n="localDataHelp">Subtitle study saves subtitles, summaries, comment results, translations, and notes in this Chrome profile. Clearing saved results may require fetching or analyzing them again, using service quota.</p>
         <div class="data-actions">
-          <button id="clearCacheBtn" type="button" data-i18n="clearCache">
-            Clear cached digests and comments
-          </button>
-          <button id="clearNotesBtn" type="button" data-i18n="deleteNotes">
-            Delete all notes
-          </button>
+          <button id="clearCacheBtn" type="button" data-i18n="clearCache">Clear saved learning results and translations</button>
+          <button id="clearNotesBtn" type="button" data-i18n="deleteNotes">Delete all clip notes</button>
           <button
             id="resetBtn"
             class="danger"
             type="button"
             data-i18n="resetData"
-          >
-            Reset extension data
-          </button>
+          >Delete all extension data</button>
         </div>
         <span id="dataStatus" role="status" aria-live="polite"></span>
       </section>

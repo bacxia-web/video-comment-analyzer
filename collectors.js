@@ -17,7 +17,7 @@ async function panoramaReadVideo(expected, withTranscript) {
     }
     return false;
   }
-  if (!current()) return fail("页面已切换，请重新读取。", "PAGE_CHANGED");
+  if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
   try {
     if (expected.platform === "youtube") {
       const response = document.getElementById("movie_player")?.getPlayerResponse?.() || window.ytInitialPlayerResponse;
@@ -52,8 +52,8 @@ async function panoramaReadVideo(expected, withTranscript) {
               text: node.textContent }));
           }
           rows = rows.filter(row => row.text.trim());
-          if (!current()) return fail("页面已切换，请重新读取。", "PAGE_CHANGED");
-          if (rows.length) return { success: true, info, rows, source: "YouTube 原生字幕" };
+          if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
+          if (rows.length) return { success: true, info, rows, source: "YouTube 网站字幕" };
         } catch { /* The native caption endpoint may reject this session. Try the visible transcript. */ }
       }
       const rows = [...document.querySelectorAll("ytd-transcript-segment-renderer")].map(node => {
@@ -71,26 +71,26 @@ async function panoramaReadVideo(expected, withTranscript) {
     if (view.code !== 0 || !view.data) return fail("哔哩哔哩未返回视频信息，请确认视频可正常播放。", "BILIBILI_API_ERROR");
     const data = view.data;
     const part = data.pages?.find(page => page.page === expected.part);
-    if (!part) return fail("未找到当前分 P，请刷新后重试。", "BILIBILI_PART_NOT_FOUND");
+    if (!part) return fail("未找到当前视频的分集，请刷新视频页面后重试。", "BILIBILI_PART_NOT_FOUND");
     const info = { title: data.title + (data.pages.length > 1 ? ` · P${expected.part} ${part.part}` : ""),
       channelName: data.owner?.name || "", description: data.desc || "", duration: Number(part.duration) || 0 };
     if (!withTranscript) return { success: true, info };
     const query = new URLSearchParams({ bvid: data.bvid, cid: String(part.cid) });
     const playerResponse = await timeoutFetch(`https://api.bilibili.com/x/player/wbi/v2?${query}`, { credentials: "include" });
-    if (!playerResponse.ok) return fail("字幕接口暂时不可用，请稍后重试。", "BILIBILI_API_ERROR");
+    if (!playerResponse.ok) return fail("暂时无法获取字幕，请稍后重试。", "BILIBILI_API_ERROR");
     const player = await playerResponse.json();
-    if (player.code !== 0) return fail("字幕接口未授权或被限流，请登录哔哩哔哩后重试。", "BILIBILI_API_ERROR");
+    if (player.code !== 0) return fail("暂时无法读取字幕。请先登录哔哩哔哩，再重试；仍失败时可稍后再试。", "BILIBILI_API_ERROR");
     const subtitles = [...(player.data?.subtitle?.subtitles || [])];
     subtitles.sort((a, b) => Number((b.lan || "").includes("zh")) - Number((a.lan || "").includes("zh")));
     if (!subtitles.length) return fail(player.data?.need_login_subtitle
       ? "此视频字幕需要登录。请先在哔哩哔哩页面登录，再重新分析。" : "此视频没有可读取的字幕，暂不支持无字幕视频。");
     const url = new URL(subtitles[0].subtitle_url, location.href);
-    if (url.protocol !== "https:" || !(url.hostname === "hdslb.com" || url.hostname.endsWith(".hdslb.com"))) return fail("字幕地址不受支持。");
+    if (url.protocol !== "https:" || !(url.hostname === "hdslb.com" || url.hostname.endsWith(".hdslb.com"))) return fail("无法读取这个视频的字幕地址，请尝试其他视频。");
     const res = await timeoutFetch(url.href, { credentials: "omit" });
     if (!res.ok) return fail("字幕下载失败，请稍后重试。");
     const subtitle = await res.json();
-    if (!current()) return fail("页面已切换，请重新读取。", "PAGE_CHANGED");
-    return { success: true, info, source: "哔哩哔哩原生字幕", rows: (subtitle.body || []).map(row => ({
+    if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
+    return { success: true, info, source: "哔哩哔哩网站字幕", rows: (subtitle.body || []).map(row => ({
       start: Number(row.from), duration: Math.max(0, Number(row.to) - Number(row.from)), text: row.content })) };
   } catch {
     return fail("读取字幕失败或超时，请确认页面可正常播放后重试。", "TRANSCRIPT_FETCH_FAILED");
@@ -103,9 +103,9 @@ async function panoramaCollectComments(expected) {
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const comments = new Map();
   const progress = () => chrome.runtime.sendMessage({ action: "mediaProgress", key: expected.key, count: comments.size }).catch(() => {});
-  if (!current()) return fail("页面已切换，请重新采集。", "PAGE_CHANGED");
+  if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
   // Prevent two open panels from scrolling the same page concurrently.
-  if (globalThis.__panoramaCollecting) return fail("此页面正在采集评论，请稍后再试。");
+  if (globalThis.__panoramaCollecting) return fail("正在获取这个页面的评论，请等待当前操作完成。");
   globalThis.__panoramaCollecting = true;
   try {
     if (expected.platform === "xueqiu") {
@@ -119,7 +119,7 @@ async function panoramaCollectComments(expected) {
           author: String(comment.user?.screen_name || "").slice(0, 200), likeCount: Number(comment.like_count) || 0, publishedAt: "" });
       };
       for (let page = 0; page < 50; page++) {
-        if (!current()) return fail("页面已切换，请重新采集。", "PAGE_CHANGED");
+        if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
         const params = new URLSearchParams({ id: expected.id, type: "status", size: "20", max_id: maxId });
         const response = await fetch(`/statuses/v3/comments.json?${params}`, { credentials: "include", signal: AbortSignal.timeout(15000) });
         if (!response.ok) { incomplete = true; break; }
@@ -136,9 +136,9 @@ async function panoramaCollectComments(expected) {
         maxId = String(data.next_max_id);
         await sleep(700);
       }
-      if (!comments.size) return fail("未获取到雪球评论，请确认已登录、帖子有评论且没有被限流。");
+      if (!comments.size) return fail("未获取到雪球评论。请先登录雪球，确认帖子有评论后重试。");
       return { success: true, comments: [...comments.values()], truncated: incomplete,
-        source: "雪球评论接口", notice: incomplete ? "接口限流或达到采集上限，结果只包含已采集部分。" : "" };
+        source: "雪球帖子评论", notice: incomplete ? "只获取了部分评论，可能受网站限制或已达到数量上限。" : "" };
     }
     // Selectors and scroll/expand workflow adapted from Xiaohongshu-Comment-analysis.
     // Scope to the open note so feed text or another note cannot become evidence.
@@ -172,7 +172,7 @@ async function panoramaCollectComments(expected) {
     const clicked = new WeakSet();
     try {
       for (let round = 0; round < 20; round++) {
-        if (!current()) return fail("页面已切换，请重新采集。", "PAGE_CHANGED");
+        if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
         const before = comments.size;
         read();
         let expanded = 0;
@@ -190,7 +190,7 @@ async function panoramaCollectComments(expected) {
         }
         scroll.scrollTop = scroll.scrollHeight;
         await sleep(850);
-        if (!current()) return fail("页面已切换，请重新采集。", "PAGE_CHANGED");
+        if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
         read(); progress();
         if (comments.size >= 1000) break;
         stable = comments.size === before && expanded === 0 ? stable + 1 : 0;
@@ -198,10 +198,10 @@ async function panoramaCollectComments(expected) {
       }
     } finally { if (current()) scroll.scrollTop = previousScroll; }
     if (!comments.size) return fail("没有读取到评论。请登录小红书，打开笔记详情并确认评论区已显示后重试。", "NO_COMMENTS");
-    return { success: true, comments: [...comments.values()], source: "小红书页面采集", truncated: incomplete,
-      notice: "仅包含页面已加载并成功采集的评论，不保证覆盖全部评论；楼层关系未作统计。" };
+    return { success: true, comments: [...comments.values()], source: "小红书页面评论", truncated: incomplete,
+      notice: "仅包含页面已加载的评论，可能不是全部评论；没有区分评论与回复的对应关系。" };
   } catch {
-    return fail("评论采集失败，请刷新页面后重试。");
+    return fail("评论获取失败，请刷新内容页面后重试。");
   } finally { globalThis.__panoramaCollecting = false; }
 }
 
@@ -212,7 +212,7 @@ function panoramaPageInfo() {
 }
 function panoramaSeek(seconds) {
   const video = document.querySelector("video");
-  if (!video || !Number.isFinite(seconds) || seconds < 0) return { success: false, message: "未找到视频播放器。" };
+  if (!video || !Number.isFinite(seconds) || seconds < 0) return { success: false, message: "未找到视频播放器，请回到原视频页面后重试。" };
   video.currentTime = Number.isFinite(video.duration) ? Math.min(seconds, video.duration) : seconds;
   return { success: true };
 }

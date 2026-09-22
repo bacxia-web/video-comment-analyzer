@@ -16,7 +16,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}/`;
-    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.3');
+    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.4');
     await worker.evaluate(() => {
       const originalFetch = fetch;
       globalThis.fixtureRequests = [];
@@ -35,6 +35,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
         if (url.hostname === 'api.deepseek.com') {
           if (fixtureDelay) await new Promise(resolve => setTimeout(resolve, fixtureDelay));
           const body = JSON.parse(options.body);
+          const segmentIds = [...new Set([...body.messages.map(item=>item.content).join('\n').matchAll(/"id"\s*:\s*"(segment-[^"]+|ui-\d+)"/g)].map(match=>match[1]))];
+          if (segmentIds.length) return response({choices:[{message:{content:JSON.stringify({segments:segmentIds.map(id=>({id,text:'翻译后的测试字幕。'}))})}}]});
           const isComments = body.messages.some(message => message.content.includes('COMMENTS (JSON Lines)'));
           const analysis = isComments ? {summary:'评论分析完成',overallSentiment:'mixed',topics:[{title:'主要主题',sentiment:'positive',summary:'来自实际采集评论',evidenceCommentIds:['yt-1','xhs-1','sq1','invented-id']}],viewerQuestions:['用户问题'],creatorFeedback:['建议内容']}
             : {chapters:[{title:'第一章节',summary:'视频字幕分析完成',timestampSeconds:0},{title:'第二章节',summary:'内容细节',timestampSeconds:5}],keyQuotes:[{quote:'fixture quote',timestampSeconds:5}],keyMoments:[0,5]};
@@ -99,7 +101,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await settings.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('设置已保存'));
     assert.equal((await worker.evaluate(()=>chrome.storage.local.get('ytd_settings'))).ytd_settings.aiApiKey,'fixture-updated-key');
     await settings.locator('#optionalServices summary').click();
-    await settings.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-settings.png'),fullPage:true});
+    await settings.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-settings.png'),fullPage:true,animations:'disabled'});
     console.log('PASS settings page without dialog, required DeepSeek, optional YouTube, application link and validation');
 
     const legacySettings = await context.newPage();
@@ -107,6 +109,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await legacySettings.locator('[data-language="zh-CN"]').click();
     assert.match(await legacySettings.locator('label[for=youtubeApiKey]').textContent(),/可选/);
     assert.match(await legacySettings.locator('#supadataQuota').textContent(),/每月 100 积分/);
+    assert.match(await legacySettings.locator('#youtubeApiKey').getAttribute('placeholder'),/粘贴/);
+    await legacySettings.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-advanced-settings.png'),fullPage:true,animations:'disabled'});
     await legacySettings.locator('[data-language=en]').click();
     assert.match(await legacySettings.locator('label[for=youtubeApiKey]').textContent(),/optional/);
     assert.match(await legacySettings.locator('#youtubeQuota').textContent(),/10,000/);
@@ -123,7 +127,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     const bounds = await launcherPage.locator('#vca-open').boundingBox();
     assert.ok(bounds.x > 300 && bounds.y > 800 && bounds.width === 56);
     await launcherPage.locator('#vca-open').hover();
-    await launcherPage.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-launcher.png'),fullPage:true});
+    await launcherPage.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-launcher.png'),fullPage:true,animations:'disabled'});
     await worker.evaluate(()=>{
       const originalOpen = chrome.sidePanel.open.bind(chrome.sidePanel);
       globalThis.fixturePanelOpens = [];
@@ -211,7 +215,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
 
     await panel.locator('[data-mode=comments]').click();
     await panel.locator('#analyze').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('单独的 Google'));
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('请在设置中填写该可选项'));
     assert.equal(await panel.locator('#fixSettings').isVisible(),true);
     await settings.locator('#youtubeKey').fill('fixture-google-key');
     await settings.locator('#preferencesForm button[type=submit]').click();
@@ -259,14 +263,14 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
       assert.ok(dimensions.scroll<=dimensions.width,`horizontal overflow at ${width}`);
     }
     await panel.setViewportSize({width:414,height:900});
-    await panel.screenshot({path:path.join(os.tmpdir(),'panorama-panel-smoke.png'),fullPage:true});
+    await panel.screenshot({path:path.join(os.tmpdir(),'panorama-panel-smoke.png'),fullPage:true,animations:'disabled'});
     console.log('PASS panel layout at 320, 375, 414 and 768 pixels');
 
     await page.goto('https://xueqiu.com/123/456');
     await page.locator('#vca-open').waitFor({state:'visible'});
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='雪球');
     await panel.locator('#collect').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('采集完成'));
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('内容已获取'));
     assert.match(await panel.locator('#rawContent').textContent(),/雪球评论/);
     console.log('PASS retained Xueqiu comments');
 
@@ -282,6 +286,54 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     assert.equal(await panel.locator('#analyze').isDisabled(),false);
     assert.deepEqual(pageErrors,[]);
     console.log('PASS navigation discards a late analysis response and leaves the new page usable');
+
+    await worker.evaluate(async()=>{
+      fixtureDelay=0;
+      const saved=await chrome.storage.local.get('ytd_settings');
+      await chrome.storage.local.set({ytd_settings:{...saved.ytd_settings,supadataApiKey:'fixture-subtitle-key'},ytd_notes:[{
+        id:'fixture-note',videoId:'dQw4w9WgXcQ',videoTitle:'测试视频',text:'已经保存的片段笔记。',timestamp:'0:05',timestampSeconds:5,
+        timestampedUrl:'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=5s'
+      }]});
+    });
+    await page.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    // This UI is hosted in a tab for inspection. A native side panel does not
+    // become an active chrome-extension: tab when a tester clicks its controls.
+    await context.addInitScript(()=>{if(location.pathname==='/sidepanel.html') window.close=()=>{};});
+    const learning = await context.newPage();
+    learning.on('pageerror',error=>pageErrors.push(error.message));
+    await learning.goto(base+'sidepanel.html');
+    await learning.locator('#transcriptList .transcript-entry').first().waitFor();
+    await learning.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-subtitle-study.png'),fullPage:true,animations:'disabled'});
+    await learning.locator('[data-tab=overview]').click();
+    await learning.locator('#chapterList .chapter-title').first().waitFor();
+    await learning.locator('[data-tab=comments]').click();
+    await learning.locator('#commentFetchBtn').click();
+    await learning.waitForFunction(()=>document.getElementById('commentsStatus').textContent.startsWith('已获取'));
+    await learning.locator('#commentAnalyzeBtn').click();
+    await learning.waitForFunction(()=>document.getElementById('commentsStatus').textContent.startsWith('评论分析完成'));
+    assert.equal(await learning.locator('#commentSentiment').textContent(),'褒贬不一');
+    await learning.locator('[data-tab=notes]').click();
+    await learning.locator('.note-copy-link').first().waitFor();
+    await learning.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-notes.png'),fullPage:true,animations:'disabled'});
+    await learning.locator('[data-tab=transcript]').click();
+    await learning.locator('[data-language-mode=bilingual]').click();
+    await learning.waitForFunction(()=>document.querySelector('#transcriptList .transcript-translation')?.textContent==='翻译后的测试字幕。');
+    for (const width of [320,414,768]) {
+      await learning.setViewportSize({width,height:900});
+      assert.ok(await learning.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`learning layout overflow at ${width}`);
+    }
+    await learning.setViewportSize({width:414,height:900});
+    await learning.locator('[data-language-mode=original]').click();
+    await worker.evaluate(async()=>{
+      const saved=await chrome.storage.local.get('ytd_settings');
+      await chrome.storage.local.set({ytd_settings:{...saved.ytd_settings,aiApiKey:''}});
+    });
+    await learning.locator('[data-tab=comments]').click();
+    await learning.locator('#commentAnalyzeBtn').click();
+    await learning.waitForFunction(()=>document.getElementById('commentsStatus').textContent.includes('填写 DeepSeek API Key'));
+    assert.doesNotMatch(await learning.locator('#commentsStatus').textContent(),/NO_AI_KEY/);
+    assert.deepEqual(pageErrors,[]);
+    console.log('PASS subtitle study, summary, comments, clip notes and bilingual translation; responsive Chinese copy and actionable missing-key message');
     console.log('All browser smoke tests passed. APIs mocked; no real keys or paid requests used.');
   } finally { await context.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

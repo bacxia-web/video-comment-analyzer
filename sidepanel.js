@@ -280,7 +280,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     isCommentsLoading
   ) {
     setCommentsStatus(
-      `Fetching comments... ${Number(message.count) || 0} loaded. ${message.detail || ""}`,
+      `正在获取评论… 已获取 ${Number(message.count) || 0} 条（含回复）。`,
     );
     sendResponse({ success: true });
   }
@@ -628,7 +628,7 @@ async function startDigest(videoId, videoUrl) {
   }
 
   showState("loading");
-  updateLoading("Fetching transcript", "");
+  updateLoading("正在获取字幕…", "");
 
   const transcriptResult = await chrome.runtime.sendMessage({
     action: "fetchTranscript",
@@ -638,8 +638,8 @@ async function startDigest(videoId, videoUrl) {
   if (!transcriptResult.success) {
     showCommentsWithoutTranscript(
       transcriptResult.error === "NO_SUPADATA_KEY"
-        ? "Add a Supadata API key in Settings to use transcript features. Comment fetching still works."
-        : `${transcriptResult.message || transcriptResult.error} Comment fetching may still work.`,
+        ? PANORAMA_COPY.error({ error: "NO_SUPADATA_KEY" })
+        : PANORAMA_COPY.error(transcriptResult, "字幕获取失败，请稍后重试。"),
     );
     return;
   }
@@ -727,8 +727,8 @@ function renderAnalysisResults(analysis) {
       <div class="quote-meta">
         <span class="quote-timestamp">${escapeHtml(quote.timestamp)}</span>
         <div class="quote-actions">
-          <button class="quote-save-note-btn" title="Save this quote as a note">📝 Note</button>
-          <button class="quote-copy-btn" title="Copy this quote">⧉ Copy</button>
+          <button class="quote-save-note-btn" title="保存此时间附近的字幕为片段笔记">保存片段</button>
+          <button class="quote-copy-btn" title="复制这段引用的原文">复制原文</button>
         </div>
       </div>
     `;
@@ -746,9 +746,9 @@ function renderAnalysisResults(analysis) {
       e.stopPropagation();
       try {
         await navigator.clipboard.writeText(quote.quote);
-        quoteCopyBtn.textContent = "✓ Copied";
+        quoteCopyBtn.textContent = "已复制";
         setTimeout(() => {
-          quoteCopyBtn.textContent = "⧉ Copy";
+          quoteCopyBtn.textContent = "复制原文";
         }, 1500);
       } catch (err) {
         console.error("Copy failed:", err);
@@ -777,7 +777,7 @@ async function saveQuoteAsNote(quote, btn) {
   if (!currentVideoId) return;
 
   const originalText = btn.textContent;
-  btn.textContent = "Saving...";
+  btn.textContent = "正在保存…";
   btn.disabled = true;
 
   try {
@@ -790,7 +790,7 @@ async function saveQuoteAsNote(quote, btn) {
     });
 
     if (result.success) {
-      btn.textContent = "✓ Saved";
+      btn.textContent = "已保存";
       setTimeout(() => {
         btn.textContent = originalText;
         btn.disabled = false;
@@ -799,7 +799,7 @@ async function saveQuoteAsNote(quote, btn) {
       loadNotes(currentVideoId);
     } else {
       console.error("[Video & Comment Analyzer] Save quote as note failed:", result.error);
-      btn.textContent = "Error";
+      btn.textContent = "保存失败，请重试";
       setTimeout(() => {
         btn.textContent = originalText;
         btn.disabled = false;
@@ -807,7 +807,7 @@ async function saveQuoteAsNote(quote, btn) {
     }
   } catch (error) {
     console.error("[Video & Comment Analyzer] Save quote as note error:", error);
-    btn.textContent = "Error";
+    btn.textContent = "保存失败，请重试";
     setTimeout(() => {
       btn.textContent = originalText;
       btn.disabled = false;
@@ -870,7 +870,7 @@ function renderTranscript() {
   const badge = document.createElement("div");
   badge.id = "transcriptSourceBadge";
   badge.className = "transcript-source-badge";
-  badge.innerHTML = `<span class="source-dot source-dot--subs"></span> From video subtitles · ${escapeHtml(getOriginalTranscriptLabel())}`;
+  badge.innerHTML = `<span class="source-dot source-dot--subs"></span> 来自视频已有字幕 · ${escapeHtml(getOriginalTranscriptLabel())}`;
   transcriptList.parentElement.insertBefore(badge, transcriptList);
 
   // Group entries using smart sentence-boundary + time-guardrail logic
@@ -909,21 +909,21 @@ function exportTranscript() {
   const videoUrl = `https://youtube.com/watch?v=${currentVideoId}`;
 
   let exportText = "";
-  exportText += `TRANSCRIPT\n`;
+  exportText += `视频字幕\n`;
   exportText += `${"=".repeat(60)}\n\n`;
-  exportText += `Title: ${currentVideoTitle || "Unknown"}\n`;
-  exportText += `Channel: ${currentChannelName || "Unknown"}\n`;
-  exportText += `URL: ${videoUrl}\n`;
+  exportText += `标题：${currentVideoTitle || "未知标题"}\n`;
+  exportText += `作者：${currentChannelName || "未知作者"}\n`;
+  exportText += `视频链接：${videoUrl}\n`;
   exportText += `\n${"—".repeat(60)}\n\n`;
 
   if (currentVideoDescription) {
-    exportText += `DESCRIPTION:\n${currentVideoDescription}\n`;
+    exportText += `视频介绍：\n${currentVideoDescription}\n`;
     exportText += `\n${"—".repeat(60)}\n\n`;
   }
 
-  exportText += `TRANSCRIPT:\n\n${transcriptContent}\n`;
+  exportText += `视频字幕：\n\n${transcriptContent}\n`;
   exportText += `\n${"—".repeat(60)}\n`;
-  exportText += `Exported by Video & Comment Analyzer\n`;
+  exportText += `由 Video & Comment Analyzer 导出\n`;
 
   const filename = `${sanitizeFilename(currentVideoTitle)}-transcript.txt`;
   downloadTextFile(exportText, filename);
@@ -966,7 +966,7 @@ function showError(title, message) {
   showState("error");
   document.getElementById("errorTitle").textContent = title;
   document.getElementById("errorMessage").textContent = message;
-  document.getElementById("errorBtn").textContent = "Try Again";
+  document.getElementById("errorBtn").textContent = "重试";
 }
 
 // ============================================================
@@ -1015,10 +1015,10 @@ async function triggerAnalysis() {
 
   if (chapterList)
     chapterList.innerHTML =
-      '<li class="chapter-item" style="color: var(--text-muted); border: none;">Loading chapters...</li>';
+      '<li class="chapter-item" style="color: var(--text-muted); border: none;">DeepSeek 正在生成章节摘要…</li>';
   if (quotesList)
     quotesList.innerHTML =
-      '<div class="quote-item" style="color: var(--text-muted); border-left-color: var(--border);">Loading quotes...</div>';
+      '<div class="quote-item" style="color: var(--text-muted); border-left-color: var(--border);">正在整理关键引用…</div>';
 
   try {
     const analysisResult = await chrome.runtime.sendMessage({
@@ -1032,7 +1032,8 @@ async function triggerAnalysis() {
 
     if (!analysisResult.success) {
       if (chapterList)
-        chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">Analysis failed: ${escapeHtml(analysisResult.error || "Unknown error")}</li>`;
+        chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">${escapeHtml(PANORAMA_COPY.error(analysisResult, "摘要生成失败，请稍后重试。"))}</li>`;
+      if (quotesList) quotesList.textContent = "尚未生成关键引用。解决上方提示后，切换到其他栏目，再回到「AI 摘要」重试。";
       isAnalysisLoading = false;
       return;
     }
@@ -1046,7 +1047,8 @@ async function triggerAnalysis() {
   } catch (error) {
     console.error("[Video & Comment Analyzer Panel] Analysis error:", error);
     if (chapterList)
-      chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">Error: ${escapeHtml(error.message)}</li>`;
+      chapterList.innerHTML = `<li class="chapter-item" style="color: var(--accent); border: none;">${escapeHtml(PANORAMA_COPY.error(error))}</li>`;
+    if (quotesList) quotesList.textContent = "尚未生成关键引用。切换到其他栏目，再回到「AI 摘要」重试。";
   }
 
   isAnalysisLoading = false;
@@ -1080,9 +1082,9 @@ function resetCommentState() {
   const fetchButton = document.getElementById("commentFetchBtn");
   if (fetchButton) {
     fetchButton.disabled = false;
-    fetchButton.textContent = "Fetch comments";
+    fetchButton.textContent = "获取评论";
   }
-  setCommentsStatus("Fetch public comments and replies when you are ready.");
+  setCommentsStatus("点击「获取评论」读取公开评论和回复，需要 YouTube Data API Key，并消耗其额度。");
 }
 
 function showCommentsWithoutTranscript(message) {
@@ -1098,6 +1100,9 @@ function showCommentsWithoutTranscript(message) {
   showState("results");
   document.getElementById("tabsNav").style.display = "flex";
   switchTab("comments");
+  setCommentsStatus(`${message} 也可以先获取评论，需要 YouTube Data API Key。`);
+  document.getElementById("chapterList").textContent = "还没有可分析的字幕。请先在「视频字幕」中查看提示，完成配置后重新打开字幕学习。";
+  document.getElementById("quotesList").textContent = "获取字幕后，才能生成章节摘要和关键引用。";
 }
 
 async function initializeCommentsTab() {
@@ -1122,12 +1127,12 @@ async function initializeCommentsTab() {
     if (currentCommentAnalysis) {
       renderCommentAnalysis(currentCommentAnalysis);
       document.getElementById("commentSampleNote").textContent = cached.sampleSize
-        ? `AI sample: ${cached.sampleSize} comments`
+        ? `本次分析了 ${cached.sampleSize} 条评论`
         : "";
     }
     const fetchButton = document.getElementById("commentFetchBtn");
-    if (fetchButton) fetchButton.textContent = "Refresh comments";
-    setCommentsStatus("Loaded a recent local comment analysis. Refresh to fetch the latest discussion.");
+    if (fetchButton) fetchButton.textContent = "重新获取评论";
+    setCommentsStatus("已显示本机保存的评论结果。需要最新内容时，点击「重新获取评论」。");
   } catch (error) {
     console.error("Comment cache load error:", error);
   }
@@ -1140,10 +1145,10 @@ async function fetchCurrentComments() {
   const analyzeButton = document.getElementById("commentAnalyzeBtn");
   if (fetchButton) {
     fetchButton.disabled = true;
-    fetchButton.textContent = "Fetching...";
+    fetchButton.textContent = "正在获取…";
   }
   if (analyzeButton) analyzeButton.disabled = true;
-  setCommentsStatus("Fetching public comments through the YouTube Data API...");
+  setCommentsStatus("正在获取 YouTube 评论和回复…");
 
   try {
     const result = await chrome.runtime.sendMessage({
@@ -1153,8 +1158,8 @@ async function fetchCurrentComments() {
     if (!result?.success) {
       const message =
         result?.error === "NO_YOUTUBE_KEY"
-          ? "Add a YouTube Data API key in Settings, then try again."
-          : result?.message || result?.error || "Could not fetch comments.";
+          ? PANORAMA_COPY.error({ error: "NO_YOUTUBE_KEY" })
+          : PANORAMA_COPY.error(result, "评论获取失败，请稍后重试。");
       setCommentsStatus(message, true);
       return;
     }
@@ -1172,23 +1177,23 @@ async function fetchCurrentComments() {
     if (actions) actions.hidden = currentComments.length === 0;
     document.getElementById("commentSampleNote").textContent =
       currentComments.length > 400
-        ? "AI will sample up to 400 comments"
+        ? "最多选取 400 条评论进行 AI 分析"
         : "";
     setCommentsStatus(
       currentComments.length
-        ? `Fetched ${currentComments.length} comments and replies${currentCommentsTruncated ? " (1,000-comment limit reached)" : ""}.`
-        : "No public comments were returned for this video.",
+        ? `已获取 ${currentComments.length} 条评论（含回复）${currentCommentsTruncated ? "，已达到 1,000 条上限" : ""}。点击「开始分析」后，会将评论发送给 DeepSeek，按账户计费。`
+        : "没有获取到公开评论。请确认此视频的评论区有内容。",
     );
     await saveCommentCache();
   } catch (error) {
-    setCommentsStatus(error.message || "Could not fetch comments.", true);
+    setCommentsStatus(PANORAMA_COPY.error(error, "评论获取失败，请稍后重试。"), true);
   } finally {
     isCommentsLoading = false;
     if (fetchButton) {
       fetchButton.disabled = false;
       fetchButton.textContent = currentCommentStats
-        ? "Refresh comments"
-        : "Fetch comments";
+        ? "重新获取评论"
+        : "获取评论";
     }
     if (analyzeButton) analyzeButton.disabled = currentComments.length === 0;
   }
@@ -1200,9 +1205,9 @@ async function analyzeCurrentComments() {
   const button = document.getElementById("commentAnalyzeBtn");
   if (button) {
     button.disabled = true;
-    button.textContent = "Analyzing...";
+    button.textContent = "正在分析…";
   }
-  setCommentsStatus("Analyzing audience topics and sentiment with DeepSeek...");
+  setCommentsStatus("DeepSeek 正在整理讨论主题与评论态度…");
   try {
     const result = await chrome.runtime.sendMessage({
       action: "analyzeComments",
@@ -1213,26 +1218,26 @@ async function analyzeCurrentComments() {
     if (!result?.success) {
       const message =
         result?.error === "NO_AI_KEY"
-          ? "Add a DeepSeek API key in Settings, then try again."
-          : result?.message || result?.error || "Comment analysis failed.";
+          ? PANORAMA_COPY.error({ error: "NO_AI_KEY" })
+          : PANORAMA_COPY.error(result, "评论分析失败，请稍后重试。");
       setCommentsStatus(message, true);
       return;
     }
     currentCommentAnalysis = result.analysis;
     renderCommentAnalysis(currentCommentAnalysis);
     document.getElementById("commentSampleNote").textContent =
-      `AI sample: ${result.sampleSize || currentComments.length} comments`;
-    setCommentsStatus("Comment analysis complete.");
+      `本次分析了 ${result.sampleSize || currentComments.length} 条评论`;
+    setCommentsStatus("评论分析完成。结论仅代表本次获取的评论。");
     await saveCommentCache(result.sampleSize);
   } catch (error) {
-    setCommentsStatus(error.message || "Comment analysis failed.", true);
+    setCommentsStatus(PANORAMA_COPY.error(error, "评论分析失败，请稍后重试。"), true);
   } finally {
     isCommentAnalysisLoading = false;
     if (button) {
       button.disabled = false;
       button.textContent = currentCommentAnalysis
-        ? "Analyze again"
-        : "Analyze with AI";
+        ? "重新分析"
+        : "开始分析";
     }
   }
 }
@@ -1242,10 +1247,10 @@ function renderCommentStats() {
   if (!container || !currentCommentStats) return;
   container.replaceChildren();
   const entries = [
-    ["Comments", currentCommentStats.total],
-    ["Top-level", currentCommentStats.topLevel],
-    ["Replies", currentCommentStats.replies],
-    ["Authors", currentCommentStats.authors],
+    ["评论总数", currentCommentStats.total],
+    ["主评论", currentCommentStats.topLevel],
+    ["回复", currentCommentStats.replies],
+    ["发言人数", currentCommentStats.authors],
   ];
   for (const [label, value] of entries) {
     const card = document.createElement("div");
@@ -1274,9 +1279,9 @@ function renderTopComments(comments) {
     const meta = document.createElement("div");
     meta.className = "top-comment-meta";
     const author = document.createElement("span");
-    author.textContent = comment.author || "YouTube viewer";
+    author.textContent = comment.author || "匿名用户";
     const likes = document.createElement("span");
-    likes.textContent = `${Number(comment.likeCount) || 0} likes${comment.parentCommentId ? " · reply" : ""}`;
+    likes.textContent = `${Number(comment.likeCount) || 0} 赞${comment.parentCommentId ? " · 回复" : ""}`;
     meta.append(author, likes);
     const text = document.createElement("div");
     text.className = "top-comment-text";
@@ -1297,13 +1302,13 @@ function renderCommentAnalysis(analysis) {
   const wrapper = document.getElementById("commentAnalysis");
   const sentiment = document.getElementById("commentSentiment");
   sentiment.className = `sentiment-badge ${analysis.overallSentiment || "neutral"}`;
-  sentiment.textContent = analysis.overallSentiment || "neutral";
+  sentiment.textContent = PANORAMA_COPY.sentiments[analysis.overallSentiment] || "中性";
   const commentSummary = document.getElementById("commentSummary");
-  commentSummary.textContent = analysis.summary || "No summary returned.";
+  commentSummary.textContent = analysis.summary || "本次没有生成评论概览，可以重新分析。";
   registerLocalizedContent(
     commentSummary,
     `comments:${currentVideoId}:analysis:summary`,
-    analysis.summary || "No summary returned.",
+    analysis.summary || "本次没有生成评论概览，可以重新分析。",
   );
 
   const topics = document.getElementById("commentTopics");
@@ -1318,7 +1323,7 @@ function renderCommentAnalysis(analysis) {
     title.textContent = topic.title;
     const badge = document.createElement("span");
     badge.className = `sentiment-badge ${topic.sentiment || "neutral"}`;
-    badge.textContent = topic.sentiment || "neutral";
+    badge.textContent = PANORAMA_COPY.sentiments[topic.sentiment] || "中性";
     header.append(title, badge);
     const summary = document.createElement("p");
     summary.className = "comment-topic-summary";
@@ -1342,7 +1347,7 @@ function renderCommentAnalysis(analysis) {
       quoteText.textContent = evidence.text;
       const meta = document.createElement("div");
       meta.className = "comment-evidence-meta";
-      meta.textContent = `${evidence.author || "YouTube viewer"} · ${Number(evidence.likeCount) || 0} likes`;
+      meta.textContent = `${evidence.author || "匿名用户"} · ${Number(evidence.likeCount) || 0} 赞`;
       quote.append(quoteText, meta);
       card.appendChild(quote);
       registerLocalizedContent(
@@ -1527,7 +1532,7 @@ async function copyToClipboardWithFeedback(text, buttonId) {
 
   const success = await copyToClipboard(text);
   if (success) {
-    btn.textContent = "✓ Copied";
+    btn.textContent = "已复制";
     setTimeout(() => {
       btn.textContent = original;
     }, 2000);
@@ -1572,7 +1577,7 @@ function setupExplainFeature() {
   const tooltip = document.createElement("div");
   tooltip.id = "explainTooltip";
   tooltip.className = "explain-tooltip";
-  tooltip.innerHTML = `<button class="explain-btn">💡 Explain</button>`;
+  tooltip.innerHTML = `<button class="explain-btn">解释选中文字</button>`;
   tooltip.style.display = "none";
   document.body.appendChild(tooltip);
 
@@ -1646,14 +1651,14 @@ async function showExplanation(selectedText) {
   modal.innerHTML = `
     <div class="explain-modal">
       <div class="explain-modal-header">
-        <div class="explain-modal-title">Explain</div>
-        <button class="explain-modal-close" id="closeExplain">✕</button>
+        <div class="explain-modal-title">AI 解释</div>
+        <button class="explain-modal-close" id="closeExplain" aria-label="关闭解释">✕</button>
       </div>
       <div class="explain-selected-text">"${escapeHtml(selectedText.substring(0, 200))}${selectedText.length > 200 ? "..." : ""}"</div>
       <div class="explain-modal-content" id="explanationContent">
         <div class="explain-loading">
           <div class="loading-bar"></div>
-          <span>Analyzing...</span>
+          <span>DeepSeek 正在解释选中的内容…</span>
         </div>
       </div>
     </div>
@@ -1685,11 +1690,11 @@ async function showExplanation(selectedText) {
     if (result.success) {
       contentDiv.innerHTML = `<div class="explain-text">${escapeHtml(result.explanation).replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</div>`;
     } else {
-      contentDiv.innerHTML = `<div class="explain-error">Failed to get explanation: ${escapeHtml(result.error)}</div>`;
+      contentDiv.innerHTML = `<div class="explain-error">${escapeHtml(PANORAMA_COPY.error(result, "解释未完成，请重新选择文字后重试。"))}</div>`;
     }
   } catch (error) {
     const contentDiv = document.getElementById("explanationContent");
-    contentDiv.innerHTML = `<div class="explain-error">Error: ${escapeHtml(error.message)}</div>`;
+    contentDiv.innerHTML = `<div class="explain-error">${escapeHtml(PANORAMA_COPY.error(error))}</div>`;
   }
 }
 
@@ -1872,8 +1877,8 @@ function renderNotes(notes, filteredVideoId) {
   if (!notes || notes.length === 0) {
     notesIntro.style.display = "block";
     notesIntro.textContent = filteredVideoId
-      ? "No notes for this video yet. Hover over the video and click 📝 Note to save."
-      : "No notes saved yet. Hover over a video and click 📝 Note to save.";
+      ? "这个视频还没有片段笔记。把鼠标移到视频画面上，点击「保存片段」，即可保存当前位置附近的字幕。"
+      : "还没有片段笔记。把鼠标移到 YouTube 视频画面上，点击「保存片段」。";
     return;
   }
 
@@ -1886,13 +1891,13 @@ function renderNotes(notes, filteredVideoId) {
       <div class="note-header">
         <span class="note-timestamp" data-url="${escapeHtml(note.timestampedUrl)}" data-seconds="${Number(note.timestampSeconds) || 0}">${escapeHtml(note.timestamp)}</span>
         ${!filteredVideoId ? `<span class="note-video-title">${escapeHtml(note.videoTitle)}</span>` : ""}
-        <button class="note-delete" data-id="${escapeHtml(note.id)}" title="Delete note">✕</button>
+        <button class="note-delete" data-id="${escapeHtml(note.id)}" title="删除这条片段笔记" aria-label="删除这条片段笔记">✕</button>
       </div>
       <div class="note-text">"${escapeHtml(note.text)}"</div>
       <div class="note-actions">
-        <button class="note-action-btn note-copy-text">⧉ Copy text</button>
-        <button class="note-action-btn note-copy-link" data-url="${escapeHtml(note.timestampedUrl)}">🔗 Copy timestamp</button>
-        <button class="note-action-btn note-play" data-seconds="${Number(note.timestampSeconds) || 0}">▶ Play</button>
+        <button class="note-action-btn note-copy-text" title="复制这条片段笔记的原文">复制原文</button>
+        <button class="note-action-btn note-copy-link" data-url="${escapeHtml(note.timestampedUrl)}">复制片段链接</button>
+        <button class="note-action-btn note-play" data-seconds="${Number(note.timestampSeconds) || 0}">跳到此处</button>
       </div>
     `;
 
@@ -1931,9 +1936,9 @@ function renderNotes(notes, filteredVideoId) {
         try {
           await navigator.clipboard.writeText(note.text);
           const btn = noteEl.querySelector(".note-copy-text");
-          btn.textContent = "✓ Copied!";
+          btn.textContent = "已复制";
           setTimeout(() => {
-            btn.textContent = "⧉ Copy text";
+            btn.textContent = "复制原文";
           }, 2000);
         } catch (err) {
           console.error("Copy failed:", err);
@@ -1947,9 +1952,9 @@ function renderNotes(notes, filteredVideoId) {
         try {
           await navigator.clipboard.writeText(note.timestampedUrl);
           const btn = noteEl.querySelector(".note-copy-link");
-          btn.textContent = "✓ Copied!";
+          btn.textContent = "已复制";
           setTimeout(() => {
-            btn.textContent = "🔗 Copy timestamp";
+            btn.textContent = "复制片段链接";
           }, 2000);
         } catch (err) {
           console.error("Copy failed:", err);
@@ -2385,7 +2390,7 @@ async function translatePendingUiContent() {
         } else {
           uiTranslationErrors.set(
             cacheKey,
-            result?.error || item.error || "翻译失败，再次点击当前语言可重试。",
+            `${PANORAMA_COPY.error(result, "这段内容翻译未完成。")} 再次点击「中文」或「双语」可重试。`,
           );
         }
       });
@@ -2404,8 +2409,8 @@ async function translatePendingUiContent() {
 function getOriginalTranscriptLabel() {
   const language = String(currentTranscriptLanguage || "").trim();
   return /^[A-Za-z0-9-]{1,20}$/.test(language)
-    ? `Original (${language})`
-    : "Original";
+    ? `原文（${language}）`
+    : "原文";
 }
 
 function getActiveTranscriptSegments() {
@@ -2422,9 +2427,9 @@ function renderTranscriptSegmentContent(segment, mode, translated, error) {
   if (translated) {
     translationHtml = renderSubtitleInlineMarkup(translated);
   } else if (error) {
-    translationHtml = `${escapeHtml(error)}<button class="translation-retry-btn" type="button">Retry</button>`;
+    translationHtml = `${escapeHtml(PANORAMA_COPY.error(error, "这段字幕翻译未完成。"))}<button class="translation-retry-btn" type="button">重试翻译</button>`;
   } else {
-    translationHtml = "Waiting for translation…";
+    translationHtml = "等待翻译…";
   }
 
   if (mode === "bilingual") {
@@ -2448,8 +2453,8 @@ function renderTranscriptModeRows(segments, mode) {
   const modeLabel =
     mode === "bilingual"
       ? `${originalLabel} + 简体中文`
-      : `简体中文 · translated from ${originalLabel}`;
-  badge.innerHTML = `<span class="source-dot source-dot--subs"></span> From video subtitles · ${modeLabel}`;
+      : `中文翻译 · ${originalLabel}`;
+  badge.innerHTML = `<span class="source-dot source-dot--subs"></span> 来自视频已有字幕 · ${modeLabel}`;
   transcriptList.parentElement.insertBefore(badge, transcriptList);
 
   const rows = [];
@@ -2618,7 +2623,7 @@ function retryTranslationSegment(index, generation) {
     const translation = row.querySelector(".transcript-translation");
     if (translation) {
       translation.className = "transcript-translation translation-pending";
-      translation.textContent = "Retrying…";
+      translation.textContent = "正在重试翻译…";
     }
   }
   activeTranslationQueue.enqueue(index, true);

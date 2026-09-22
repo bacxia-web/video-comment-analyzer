@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const state = { context: null, mode: "video", data: null, analysis: null, busy: false, revision: 0, refresh: 0, windowId: null };
-const sentiment = { positive: "偏正面", negative: "偏负面", neutral: "中性", mixed: "观点混合" };
+const sentiment = PANORAMA_COPY.sentiments;
 const send = message => chrome.runtime.sendMessage(message);
 const node = (tag, text, className) => {
   const element = document.createElement(tag); element.textContent = text || "";
@@ -15,12 +15,14 @@ function updateControls() {
   for (const button of document.querySelectorAll("[data-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
     button.disabled = state.busy || !!state.context && !state.context[button.dataset.mode];
+    button.title = state.context && !state.context[button.dataset.mode]
+      ? `${state.context.label}暂不支持${button.dataset.mode === "video" ? "视频摘要" : "评论分析"}。` : "";
   }
-  $("hint").textContent = !state.context ? "打开 YouTube / 哔哩哔哩视频、小红书笔记或雪球帖子，再点击插件图标。"
-    : state.mode === "video" ? "读取当前视频字幕，生成章节摘要和关键引用。"
-    : state.context.platform === "youtube" ? "通过 YouTube 官方 API 采集评论，分析讨论主题与观众反馈。"
-    : state.context.platform === "xiaohongshu" ? "自动滚动并展开当前笔记评论，分析讨论主题与用户反馈。"
-    : "读取当前雪球帖子的评论，分析讨论主题与用户反馈。";
+  $("hint").textContent = !state.context ? "支持 YouTube、哔哩哔哩视频，小红书笔记和雪球帖子。请打开内容详情页，再点击右下角「分析」。"
+    : state.mode === "video" ? "根据当前视频的字幕生成摘要。结果中的时间可以点击，直接跳到对应片段。"
+    : state.context.platform === "youtube" ? "获取当前视频的评论和回复，整理讨论主题与观众意见。需要填写 YouTube Data API Key。"
+    : state.context.platform === "xiaohongshu" ? "获取当前笔记的评论，整理讨论主题与用户意见。过程中会自动滚动、展开评论，请保持当前笔记打开。"
+    : "获取当前帖子的评论，整理讨论主题与用户意见。请先登录雪球。";
 }
 function resetResults() {
   state.data = state.analysis = null;
@@ -52,16 +54,7 @@ async function refreshContext() {
   } catch { if (request === state.refresh) { status("无法读取当前页面，请刷新页面后重试。", "error"); updateControls(); } }
 }
 function showError(result) {
-  const messages = {
-    NO_YOUTUBE_KEY: "获取 YouTube 评论需要单独的 Google API Key。请在设置中填写「YouTube Data API Key」（可选项，仅此功能需要）。",
-    NO_AI_KEY: "请先在设置中填写 DeepSeek API Key。",
-    INVALID_AI_KEY: "DeepSeek Key 无效，请在设置中检查。",
-    RATE_LIMITED: "服务暂时限流，请稍后重试。",
-    COMMENTS_DISABLED: "此视频已关闭评论。",
-    YOUTUBE_QUOTA_EXCEEDED: "YouTube API 配额已用完，请稍后重试或检查 Google Cloud 配额。",
-    YOUTUBE_API_FORBIDDEN: "YouTube API 拒绝了请求，请检查 Key、API 启用状态与配额。"
-  };
-  status(messages[result?.error] || result?.message || "操作失败，请稍后重试。", "error");
+  status(PANORAMA_COPY.error(result), "error");
   $("fixSettings").hidden = !["NO_YOUTUBE_KEY", "NO_AI_KEY", "INVALID_AI_KEY", "YOUTUBE_API_FORBIDDEN"].includes(result?.error);
 }
 function renderData() {
@@ -98,7 +91,7 @@ function renderAnalysis() {
       const item = node("article", "", "result-item");
       item.append(timeButton(chapter.timestampSeconds), node("h3", chapter.title), node("p", chapter.summary)); chapters.append(item);
     }
-    if (!analysis.chapters?.length) chapters.append(node("p", "本次未生成可用章节，可重试分析。", "muted"));
+    if (!analysis.chapters?.length) chapters.append(node("p", "本次没有生成摘要，可以点击「重新分析」重试。", "muted"));
     if (analysis.keyQuotes?.length) {
       const quotes = section("关键引用");
       for (const quote of analysis.keyQuotes) { const item = node("blockquote", ""); item.append(timeButton(quote.timestampSeconds), node("p", quote.quote)); quotes.append(item); }
@@ -129,7 +122,7 @@ async function run(withAnalysis) {
   state.busy = true; resetResults(); updateControls();
   const valid = () => revision === state.revision;
   try {
-    status(mode === "video" ? "正在读取字幕…" : "正在采集评论…", "loading");
+    status(mode === "video" ? "正在获取字幕…" : "正在获取评论，请保持当前页面打开…", "loading");
     const data = await send({ action: "mediaCollect", tabId: context.tabId, key: context.key, mode });
     if (!valid()) return;
     if (!data?.success) { showError(data); return; }
@@ -137,10 +130,10 @@ async function run(withAnalysis) {
     $("title").textContent = data.context.title; $("author").textContent = data.context.channelName || "";
     renderData();
     const count = mode === "video" ? data.transcript.length : data.comments.length;
-    if (!count) { status("此页面没有可分析的内容。", "error"); return; }
-    const note = [data.source, `${count} ${mode === "video" ? "段字幕" : "条评论"}`, data.truncated ? "已达到采集上限或仅获取部分内容" : "", data.notice].filter(Boolean).join(" · ");
-    if (!withAnalysis) { status(`采集完成。${note}`, "success"); return; }
-    status("内容已采集，DeepSeek 正在分析…", "loading");
+    if (!count) { status(mode === "video" ? "没有获取到字幕，请确认视频有字幕后重试。" : "没有获取到评论，请确认评论区有内容并已加载。", "error"); return; }
+    const note = [data.source, `${count} ${mode === "video" ? "段字幕" : "条评论"}`, data.truncated ? "仅获取了部分内容" : "", data.notice].filter(Boolean).join(" · ");
+    if (!withAnalysis) { status(`内容已获取，尚未进行 AI 分析。${note}`, "success"); return; }
+    status("内容已获取，DeepSeek 正在分析…", "loading");
     const result = await send({ action: "mediaAnalyze", tabId: context.tabId, key: context.key, mode,
       info: data.context, transcriptText: data.transcriptTextTimestamped, comments: data.comments });
     if (!valid()) return;
@@ -192,7 +185,7 @@ chrome.runtime.onMessage.addListener(message => {
   if (!state.busy || !state.context) return;
   if (message.action === "mediaProgress" && message.key === state.context.key ||
     message.action === "commentsProgress" && state.context.platform === "youtube" && message.videoId === state.context.id) {
-    status(`正在采集评论… 已读取 ${message.count} 条`, "loading");
+    status(`正在获取评论… 已获取 ${message.count} 条，请保持当前页面打开。`, "loading");
   }
 });
 (async () => {

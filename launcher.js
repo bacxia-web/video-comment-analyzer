@@ -47,7 +47,7 @@
 
   let currentKey = "", dismissedKey = "", lastUrl = "", scheduled = null;
   function label(context) {
-    return `${context.label}：${context.video && context.comments ? "分析视频或评论" : context.video ? "分析视频字幕" : "分析评论"}`;
+    return `${context.label}：${context.video && context.comments ? "视频摘要 / 评论分析" : context.video ? "根据字幕生成摘要" : "评论分析"}`;
   }
   function refresh() {
     lastUrl = location.href;

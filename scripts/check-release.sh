@@ -28,6 +28,7 @@ public_allowlist=(
   "manifest.json"
   "background.js"
   "settings.js"
+  "ui-copy.js"
   "comments.js"
   "platforms.js"
   "collectors.js"

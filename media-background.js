@@ -1,6 +1,6 @@
 /* Unified adapters reuse the existing tested AI and YouTube Data API clients. */
 async function panoramaContext(tabId, expectedKey) {
-  if (!Number.isInteger(tabId)) throw new Error("请先打开支持的视频或笔记页面。");
+  if (!Number.isInteger(tabId)) throw new Error("请先打开视频、笔记或帖子详情页。");
   const tab = await chrome.tabs.get(tabId);
   const context = PANORAMA_PLATFORMS.parse(tab.url);
   if (!context) throw new Error("请打开 YouTube / 哔哩哔哩视频、小红书笔记或雪球帖子。");
@@ -28,14 +28,14 @@ async function panoramaHandle(message) {
       if (native.success) result = { ...PANORAMA_PLATFORMS.transcriptResult(native.rows, native.source), info: native.info };
       else if (context.platform === "youtube" && native.error !== "PAGE_CHANGED" && (await getSettings()).supadataApiKey) {
         const fallback = await handleFetchTranscript(context.id);
-        result = fallback.success ? { ...PANORAMA_PLATFORMS.transcriptResult(fallback.transcript, "Supadata 原生字幕"), info: native.info } : fallback;
+        result = fallback.success ? { ...PANORAMA_PLATFORMS.transcriptResult(fallback.transcript, "Supadata 已有字幕"), info: native.info } : fallback;
       } else result = native;
     } else if (message.mode === "comments" && context.comments) {
       result = context.platform === "youtube"
         ? { ...await handleFetchComments(context.id), source: "YouTube Data API v3" }
         : await panoramaInject(context, panoramaCollectComments, [context]);
       if (result.success) result.stats = YTD_COMMENTS.calculateStats(result.comments);
-    } else throw new Error("当前平台暂不支持这种分析方式。");
+    } else throw new Error("当前页面不支持这种分析方式，请选择页面上可用的选项。");
     await panoramaContext(context.tabId, context.key);
     const info = result.success ? result.info || await panoramaInject(context, panoramaPageInfo) : {};
     return { ...result, context: { ...context, ...info } };
@@ -46,11 +46,11 @@ async function panoramaHandle(message) {
       ? await handleAnalyzeTranscript(String(message.transcriptText || "").slice(0, 180000), meta.title, meta.channelName, meta.description, meta.duration)
       : message.mode === "comments" && context.comments
         ? await handleAnalyzeComments(message.comments, meta.title, meta.channelName)
-        : { success: false, message: "当前平台暂不支持这种分析方式。" };
+        : { success: false, message: "当前页面不支持这种分析方式，请选择页面上可用的选项。" };
     await panoramaContext(context.tabId, context.key);
     return result;
   }
-  throw new Error("未知操作。");
+  throw new Error("未能识别这次操作，请重新打开插件后再试。");
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!["mediaContext", "mediaCollect", "mediaAnalyze", "mediaSeek"].includes(message?.action)) return;

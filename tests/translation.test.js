@@ -54,6 +54,7 @@ function loadSidepanelHelpers({
     YTD_SETTINGS: {},
   };
   sandbox.globalThis = sandbox;
+  vm.runInNewContext(read("ui-copy.js"), sandbox);
   vm.runInNewContext(read("sidepanel.js"), sandbox);
   return sandbox.__YTD_TRANSCRIPT_TESTING__;
 }
@@ -169,7 +170,7 @@ test("top-right global control wires Original, Chinese, and bilingual modes", ()
   const html = read("sidepanel.html");
   const js = read("sidepanel.js");
   assert.match(html, /header-actions[\s\S]*language-mode-control[\s\S]*settingsBtn/);
-  assert.match(html, /data-language-mode="original"[\s\S]*?>Original</);
+  assert.match(html, /data-language-mode="original"[\s\S]*?>原文</);
   assert.match(html, /data-language-mode="zh"[\s\S]*?>\u4e2d\u6587</);
   assert.match(html, /data-language-mode="bilingual"[\s\S]*?>\u53cc\u8bed</);
   assert.match(js, /handleGlobalLanguageModeChange\(button\.dataset\.languageMode\)/);
@@ -179,7 +180,7 @@ test("top-right global control wires Original, Chinese, and bilingual modes", ()
   assert.match(js, /registerLocalizedContent\([\s\S]*comments:/);
   assert.match(js, /registerLocalizedContent\([\s\S]*notes:/);
   assert.doesNotMatch(js, /English \+ Chinese/);
-  assert.match(js, /Original \(\$\{language\}\)/);
+  assert.match(js, /原文（\$\{language\}）/);
 });
 
 test("UI translation cache keys change when the source content changes", () => {

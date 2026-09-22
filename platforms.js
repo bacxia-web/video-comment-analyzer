@@ -47,7 +47,7 @@ var PANORAMA_PLATFORMS = (() => {
     const transcriptTextTimestamped = transcript.map(row => `[${timestamp(row.start)}] ${row.text}`).join("\n");
     // Fail visibly instead of silently analyzing only the beginning of a long video.
     if (transcriptTextTimestamped.length > 180000) return { success: false, error: "TRANSCRIPT_TOO_LONG",
-      message: "字幕超过本次分析长度上限，请选择较短的视频或分 P 视频。" };
+      message: "字幕内容过长，请选择较短的视频，或单独分析其中一集。" };
     return { success: true, transcript, transcriptText: transcript.map(row => row.text).join("\n"),
       transcriptTextTimestamped, source };
   }
