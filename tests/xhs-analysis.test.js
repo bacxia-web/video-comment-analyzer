@@ -39,7 +39,7 @@ function worker(onRequest) {
       return {text:JSON.stringify(data.task==='xhs_batch'?batchResult(data.comments):mergeResult(data.topics))};
     }};
   vm.runInNewContext(fs.readFileSync(require.resolve('../xhs-analysis.js'),'utf8'),sandbox);
-  return {calls,progress,sandbox,run:(source,id='request-1')=>sandbox.handleAnalyzeXhs(source,{key:'xiaohongshu:fixture',tabId:1,title:'笔记'},id)};
+  return {calls,progress,sandbox,run:(source,id='request-1',note)=>sandbox.handleAnalyzeXhs(source,{key:'xiaohongshu:fixture',tabId:1,title:'笔记',note},id)};
 }
 
 test('XHS settings use bounded defaults and reject unsafe or fractional overrides',()=>{
@@ -123,4 +123,63 @@ test('a second panel cannot release another running analysis lock',async()=>{
   assert.equal((await fixture.run(rows(5),'second')).success,false);
   assert.equal((await fixture.run(rows(5),'third')).success,false);
   assert.equal(fixture.calls.length,1); release(); assert.equal((await running).success,true);
+});
+
+test('every batch and merge receive the note; cross-batch references are context only',async()=>{
+  const source=rows(62);
+  for(const row of source.slice(60))Object.assign(row,{isReply:true,parentCommentId:'c-0',threadRootId:'c-1',replyToAuthor:'作者 0'});
+  const note={title:'正文测试',author:'作者',text:'只讨论室内使用，不讨论户外效果。',truncated:false};
+  const fixture=worker(), result=await fixture.run(source,'context',note);
+  assert.equal(result.success,true);
+  assert.equal(result.analysis.totalAnalyzed,62);
+  assert.equal(result.analysis.topics.reduce((sum,topic)=>sum+topic.count,0),62);
+  assert.ok(fixture.calls.every(call=>JSON.stringify(call.note)===JSON.stringify(note)));
+  const second=fixture.calls.filter(call=>call.task==='xhs_batch')[1];
+  assert.deepEqual(second.contextComments.map(row=>row.id),['c-0','c-1']);
+  assert.equal(second.comments.length,2);
+  assert.equal(second.comments[0].parentCommentId,'c-0');
+  assert.equal(second.comments[0].replyToAuthor,'作者 0');
+  const invalid=batchResult(second.comments);invalid.assignments.push({commentId:'c-0',topicId:'t0'});
+  assert.throws(()=>analysis.validateBatch(invalid,second.comments,1),/本批分析/);
+});
+
+test('batch size includes long reference comments without duplicating targets',()=>{
+  const source=rows(80);
+  source.forEach(row=>{row.text='原文'.repeat(2400);});
+  for(const row of source.slice(2))Object.assign(row,{isReply:true,parentCommentId:'c-0',threadRootId:'c-1'});
+  const prepared=analysis.prepare(source), byId=new Map(prepared.map(row=>[row.id,row]));
+  const batches=analysis.batches(prepared);
+  assert.deepEqual(batches.flat().map(row=>row.id),source.map(row=>row.id));
+  for(const batch of batches){
+    const payload=analysis.batchPayload(batch,byId);
+    assert.ok(JSON.stringify(payload).length<=24000);
+    const ids=[...payload.comments,...payload.contextComments].map(row=>row.id);
+    assert.equal(ids.length,new Set(ids).size);
+  }
+});
+
+test('missing and self-referential parents stay unconfirmed instead of being guessed',()=>{
+  const source=rows(3);
+  source[1].parentCommentId='missing';source[1].threadRootId='c-0';source[1].replyToAuthor=source[0].author;
+  source[2].parentCommentId=source[2].id;
+  const prepared=analysis.prepare(source);
+  assert.equal(prepared[1].isReply,true);
+  assert.equal(prepared[1].parentCommentId,null);
+  assert.equal(prepared[1].threadRootId,'c-0');
+  assert.equal(prepared[2].parentCommentId,null);
+  assert.deepEqual(analysis.prepareNote(null,'只有标题'),{title:'只有标题',author:'',text:'',truncated:false});
+});
+
+test('changed note text or reply relationships invalidate partial analysis checkpoints',async()=>{
+  for(const change of ['body','relationship']){
+    let fail=true;
+    const fixture=worker(data=>{if(fail&&data.task==='xhs_batch'&&data.comments[0].id==='c-60')throw new Error('Fixture timeout');});
+    const source=rows(61), note={text:'正文修改前'};
+    source[60].parentCommentId='c-0';
+    assert.equal((await fixture.run(source,'first',note)).completedBatches,1);
+    if(change==='body')note.text='正文修改后';else source[60].parentCommentId='c-1';
+    fail=false;
+    assert.equal((await fixture.run(source,'retry',note)).success,true);
+    assert.equal(fixture.calls.filter(call=>call.task==='xhs_batch'&&call.comments[0].id==='c-0').length,2);
+  }
 });

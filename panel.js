@@ -14,12 +14,17 @@ function updateControls() {
   $("analyze").disabled = $("collect").disabled = state.busy || !allowed;
   $("analyze").textContent = state.analysis ? "重新分析" : "开始分析";
   const xhs = state.context?.platform === "xiaohongshu";
+  const restricted = xhs && state.data?.stopReason === "restricted";
+  if (restricted) {
+    $("collect").disabled = true;
+    $("analyze").disabled ||= !state.data.comments.length;
+  }
   document.body.dataset.platform = state.context?.platform || "";
-  $("usageNotice").textContent = xhs ? "AI 分析使用你的 DeepSeek 额度；只获取评论不调用 AI。"
+  $("usageNotice").textContent = xhs ? "分析会将笔记正文、评论和回复上下文发送给 DeepSeek，使用你的额度；只获取不调用 AI。"
     : "「开始分析」会获取内容并发送给 DeepSeek，按你的账户计费。「只获取内容」不调用 AI，但可能消耗 YouTube 或 Supadata 的额度。";
   $("resultScope").textContent = xhs ? "评论结论仅代表本次获取的内容。" : "视频摘要只分析字幕，不识别画面。评论结论仅代表本次获取的内容。";
   $("xhsSettingsLink").hidden = !xhs;
-  $("continueCollect").hidden = !xhs || !state.data || state.busy;
+  $("continueCollect").hidden = !xhs || !state.data || state.busy || restricted;
   $("collect").textContent = xhs && state.data ? "重新获取" : "只获取内容";
   if (xhs && state.data?.comments.length) $("analyze").textContent = state.analysisFailed ? "重试分析" : state.analysis ? "重新分析已有评论" : `分析已获取的 ${state.data.comments.length} 条`;
   for (const button of document.querySelectorAll("[data-mode]")) {
@@ -31,7 +36,7 @@ function updateControls() {
   $("hint").textContent = !state.context ? "支持 YouTube、哔哩哔哩视频，小红书笔记和雪球帖子。请打开内容详情页，再点击右下角「分析」。"
     : state.mode === "video" ? "根据当前视频的字幕生成摘要。结果中的时间可以点击，直接跳到对应片段。"
     : state.context.platform === "youtube" ? "获取当前视频的评论和回复，整理讨论主题与观众意见。需要填写 YouTube Data API Key。"
-    : state.context.platform === "xiaohongshu" ? "获取过程中会自动滚动、展开回复，请保持当前笔记打开。"
+    : state.context.platform === "xiaohongshu" ? "逐个展开回复或滚动，每次操作后至少等待 3 秒。可随时停止，分析已获取的评论。"
     : "获取当前帖子的评论，整理讨论主题与用户意见。请先登录雪球。";
 }
 function resetResults() {
@@ -88,8 +93,11 @@ function renderData() {
   const rows = state.mode === "video" ? data.transcript : data.comments;
   $("rawCount").textContent = `（${rows.length} ${state.mode === "video" ? "段字幕" : "条评论"}）`;
   $("rawContent").replaceChildren();
+  const xhs = state.context.platform === "xiaohongshu", byId = new Map((data.comments || []).map(row => [row.id, row]));
+  if (xhs) PANORAMA_XHS_UI.noteContext($("rawContent"), data.note);
   for (const row of rows) {
     const item = node("div", "", "raw-row");
+    if (xhs) { PANORAMA_XHS_UI.comment(item, row, byId); $("rawContent").append(item); continue; }
     item.append(node("p", state.mode === "video" ? `[${PANORAMA_PLATFORMS.timestamp(row.start)}] ${row.text}` : row.text));
     if (state.mode === "comments") item.append(node("span", `${row.author || "匿名用户"} · ${row.likeCount} 赞`, "muted fine"));
     $("rawContent").append(item);
@@ -175,6 +183,9 @@ async function runXhs(withAnalysis, resume = false) {
   const revision = state.revision;
   if (withAnalysis && !await PANORAMA_SETUP.ensure()) return;
   if (revision !== state.revision || state.busy) return;
+  if (state.data?.stopReason === "restricted" && (resume || !withAnalysis || !state.data.comments.length)) {
+    status(state.data.stopMessage, "error"); return;
+  }
   if (resume) {
     try {
       const stored = await chrome.storage.local.get(YTD_SETTINGS.XHS_STORAGE_KEY);
@@ -207,7 +218,7 @@ async function runXhs(withAnalysis, resume = false) {
       $("title").textContent = data.context.title; $("author").textContent = data.context.channelName || "";
       renderData(); state.phase = "collected";
       PANORAMA_XHS_UI.progress("collected", { count: data.comments.length, stopMessage: data.stopMessage });
-      status(`${data.stopMessage} ${data.notice}`);
+      status(`${data.stopMessage} ${data.notice}`, data.stopReason === "restricted" ? "error" : "");
       if (!data.comments.length) return;
       // A limit or site interruption needs an explicit choice, not an implicit
       // assumption that all comments have been collected.
@@ -219,7 +230,7 @@ async function runXhs(withAnalysis, resume = false) {
     PANORAMA_XHS_UI.progress("analyze", { count, total: count, analyzed: 0, completedBatches: 0, batchCount: 0 });
     status(`正在分析已获取的 ${count} 条评论，无需重新获取。`, "loading");
     const result = await send({ action: "mediaAnalyze", tabId: context.tabId, key: context.key, mode: "comments",
-      requestId, info: state.data.context, comments: state.data.comments });
+      requestId, info: state.data.context, comments: state.data.comments, note: state.data.note });
     if (!valid()) return;
     if (!result?.success) {
       state.analysisFailed = true; showError(result); PANORAMA_XHS_UI.progress("error"); return;
@@ -245,7 +256,7 @@ $("exportData").onclick = () => {
   if (!state.data) return;
   download(JSON.stringify({ source: state.context.url, title: state.context.title, collectedAt: new Date().toISOString(),
     collectionSource: state.data.source, notice: state.data.notice, truncated: !!state.data.truncated,
-    transcript: state.data.transcript, comments: state.data.comments }, null, 2), "json", "application/json");
+    transcript: state.data.transcript, comments: state.data.comments, note: state.data.note }, null, 2), "json", "application/json");
 };
 $("exportReport").onclick = () => {
   if (!state.analysis) return;

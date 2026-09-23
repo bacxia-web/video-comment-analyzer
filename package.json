@@ -1,6 +1,6 @@
 {
   "name": "video-comment-analyzer",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "private": true,
   "description": "YouTube 字幕翻译、中英对照和笔记；YouTube、哔哩哔哩视频摘要；YouTube、小红书、雪球评论分析。",
   "license": "MIT",

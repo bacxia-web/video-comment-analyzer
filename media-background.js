@@ -57,7 +57,7 @@ async function panoramaHandle(message) {
       ? await handleAnalyzeTranscript(String(message.transcriptText || "").slice(0, 180000), meta.title, meta.channelName, meta.description, meta.duration)
       : message.mode === "comments" && context.comments
         ? context.platform === "xiaohongshu"
-          ? await handleAnalyzeXhs(message.comments, { ...context, title: meta.title }, message.requestId)
+          ? await handleAnalyzeXhs(message.comments, { ...context, title: meta.title, note: message.note }, message.requestId)
           : await handleAnalyzeComments(message.comments, meta.title, meta.channelName)
         : { success: false, message: "当前页面不支持这种分析方式，请选择页面上可用的选项。" };
     await panoramaContext(context.tabId, context.key);

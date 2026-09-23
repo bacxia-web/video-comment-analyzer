@@ -13,18 +13,40 @@ var PANORAMA_XHS = (() => {
   function prepare(comments) {
     if (!Array.isArray(comments) || !comments.length || comments.length > 5000) invalid("请获取 1～5,000 条评论后再分析。");
     const seen = new Set();
-    return comments.map(row => {
+    const source = comments.map(row => {
       if (!row || typeof row.id !== "string" || !row.id || seen.has(row.id) || typeof row.text !== "string" || !row.text.trim() || row.text.length > 5000) invalid("评论数据不完整，请重新获取后再分析。");
       seen.add(row.id);
-      return { id: row.id, text: row.text, author: text(row.author, 200), likeCount: Number.isFinite(row.likeCount) ? Math.max(0, row.likeCount) : 0 };
+      return { id: row.id, text: row.text, author: text(row.author, 200), likeCount: Number.isFinite(row.likeCount) ? Math.max(0, row.likeCount) : 0,
+        isReply: !!(row.isReply || row.parentCommentId || row.threadRootId || row.replyToAuthor),
+        parentCommentId: text(row.parentCommentId, 200) || null, threadRootId: text(row.threadRootId, 200) || null,
+        replyToAuthor: text(row.replyToAuthor, 200) };
     });
+    for (const row of source) {
+      for (const key of ["parentCommentId", "threadRootId"]) if (!seen.has(row[key]) || row[key] === row.id) row[key] = null;
+    }
+    return source;
+  }
+  function prepareNote(note, title = "") {
+    return { title: text(note?.title || title, 500), author: text(note?.author, 200), text: text(note?.text, 20000),
+      truncated: !!note?.truncated || typeof note?.text === "string" && note.text.trim().length > 20000 };
+  }
+  function batchPayload(batch, byId) {
+    const ids = new Set(batch.map(row => row.id));
+    const referenceIds = new Set(batch.flatMap(row => [row.parentCommentId, row.threadRootId]));
+    const serialize = row => ({ id: row.id, text: row.text, author: row.author, likes: row.likeCount,
+      isReply: row.isReply, parentCommentId: row.parentCommentId, threadRootId: row.threadRootId, replyToAuthor: row.replyToAuthor });
+    return { comments: batch.map(serialize),
+      contextComments: [...referenceIds].filter(id => byId.has(id) && !ids.has(id)).map(id => serialize(byId.get(id))) };
   }
   function batches(comments) {
-    const result = []; let batch = [], size = 0;
+    const result = [], byId = new Map(comments.map(row => [row.id, row])); let batch = [];
     for (const row of comments) {
-      const length = JSON.stringify({ id: row.id, text: row.text, likes: row.likeCount }).length;
-      if (batch.length && (batch.length >= 60 || size + length > 24000)) { result.push(batch); batch = []; size = 0; }
-      batch.push(row); size += length;
+      // Budget the actual comments AND their reference context, deduplicating
+      // shared ancestors. The note body has its own bounded allowance.
+      if (batch.length && (batch.length >= 60 || JSON.stringify(batchPayload([...batch, row], byId)).length > 24000)) {
+        result.push(batch); batch = [];
+      }
+      batch.push(row);
     }
     if (batch.length) result.push(batch);
     return result;
@@ -91,7 +113,7 @@ var PANORAMA_XHS = (() => {
     return { schema: "xhs-v1", summary: merged.summary, totalAnalyzed: comments.length, topics, featured, sentimentCounts,
       unclassifiedCount: reports.reduce((sum, report) => sum + report.unclassifiedIds.length, 0) };
   }
-  return { prepare, batches, validateBatch, validateMerge, result };
+  return { prepare, prepareNote, batchPayload, batches, validateBatch, validateMerge, result };
 })();
 
 // Memory-only checkpoints let a failed request retry without scrolling again or
@@ -107,7 +129,9 @@ async function handleAnalyzeXhs(comments, context, requestId) {
   let checkpoint, claimed = false;
   try {
     const source = PANORAMA_XHS.prepare(comments);
-    const bytes = new TextEncoder().encode(JSON.stringify(source.map(row => [row.id, row.text, row.likeCount])));
+    const note = PANORAMA_XHS.prepareNote(context.note, context.title);
+    const sourceById = new Map(source.map(row => [row.id, row]));
+    const bytes = new TextEncoder().encode(JSON.stringify({ note, comments: source }));
     const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(value => value.toString(16).padStart(2, "0")).join("");
     const cacheKey = `${context.key}:${digest}`;
     checkpoint = xhsAnalysisCheckpoints.get(cacheKey);
@@ -135,8 +159,8 @@ async function handleAnalyzeXhs(comments, context, requestId) {
     };
     progress("analyze");
     for (let index = checkpoint.reports.length; index < batches.length; index++) {
-      const input = await request("Batch prompt", { task: "xhs_batch", title: context.title,
-        comments: batches[index].map(row => ({ id: row.id, text: row.text, likes: row.likeCount })) });
+      const input = await request("Batch prompt", { task: "xhs_batch", title: note.title, note,
+        ...PANORAMA_XHS.batchPayload(batches[index], sourceById) });
       checkpoint.reports.push(PANORAMA_XHS.validateBatch(input, batches[index], index));
       completed += batches[index].length;
       progress("analyze");
@@ -149,7 +173,7 @@ async function handleAnalyzeXhs(comments, context, requestId) {
       const key = JSON.stringify(group.map(topic => topic.id));
       let output = checkpoint.merges.get(key);
       if (!output) {
-        const input = await request("Merge prompt", { task: "xhs_merge", title: context.title,
+        const input = await request("Merge prompt", { task: "xhs_merge", title: note.title, note,
           topics: group.map(topic => ({ id: topic.id, title: topic.title, summary: topic.summary, sentiment: topic.sentiment, count: topic.commentIds.length })) });
         output = PANORAMA_XHS.validateMerge(input, group, prefix);
         checkpoint.merges.set(key, output);

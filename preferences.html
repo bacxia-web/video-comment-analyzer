@@ -18,11 +18,11 @@
 <form id="xhsSettingsForm">
 <label for="xhsMaxComments">评论数量上限</label><input id="xhsMaxComments" type="number" min="100" max="5000" step="1" required aria-describedby="xhsCountHelp">
 <p class="help" id="xhsCountHelp">默认 1,000 条，可设为 100～5,000 条，按去重后的评论计数。达到上限会暂停；调高后可继续获取。已获取评论会全部分批分析，数量越多，分析耗时和 DeepSeek 用量越大。</p>
-<label for="xhsMaxRounds">每次最多滚动多少轮</label><input id="xhsMaxRounds" type="number" min="5" max="200" step="1" required aria-describedby="xhsRoundsHelp">
-<p class="help" id="xhsRoundsHelp">默认 20 轮，可设为 5～200 轮。每轮会读取评论、展开回复并滚动页面；调高可尝试获取更多内容，也会延长等待、增加页面操作。</p>
+<label for="xhsMaxRounds">每次最多获取多少轮</label><input id="xhsMaxRounds" type="number" min="5" max="200" step="1" required aria-describedby="xhsRoundsHelp">
+<p class="help" id="xhsRoundsHelp">默认 20 轮，可设为 5～200 轮。每轮最多展开一处回复或滚动一次，之后至少等待 3 秒；调高可尝试获取更多内容，也会延长等待、增加页面操作。</p>
 <label for="xhsIdleRounds">连续几轮没有新增后停止</label><input id="xhsIdleRounds" type="number" min="2" max="10" step="1" required aria-describedby="xhsIdleHelp">
 <p class="help" id="xhsIdleHelp">默认 3 轮，可设为 2～10 轮。网络较慢时可适度调高，减少提前结束；过高会在没有更多评论时继续等待。停止不代表已获取平台全部评论。</p>
-<p class="quota">自动滚动和展开回复可能触发网站验证码或访问限制，任何设置都不能保证账号不受限制。出现验证、登录失效或访问异常时会暂停；请在网页处理后再决定是否继续。这里只调整获取范围，不提高操作速度。</p>
+<p class="quota">自动滚动和展开回复可能触发网站验证码或访问限制，放慢速度也不能保证账号不受限制。出现验证或登录失效时会暂停；出现操作频繁或访问异常时会停止本次获取，请暂停操作并按网站提示等待。已获取的评论仍可分析或导出。</p>
 <div class="actions"><button class="primary" type="submit">保存获取设置</button><button id="resetXhsSettings" type="button">恢复默认值</button></div>
 <p id="xhsSaveStatus" role="status"></p></form></details>
 <p class="muted fine">密钥只保存在当前 Chrome 中，调用服务时发送给对应服务商，不会同步到 GitHub。保存设置不会验证密钥，可用性会在使用时检查。</p>

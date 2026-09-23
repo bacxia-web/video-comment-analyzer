@@ -168,35 +168,73 @@ async function panoramaCollectComments(expected, options = {}, requestId = "", r
     const blocked = () => {
       if ([...document.querySelectorAll('#captcha, .captcha-container, .verify-container, .red-captcha, [class*="captcha-container"]')].some(visible)) return "verification";
       if ([...document.querySelectorAll('.login-container, .login-modal, .login-mask')].some(el => visible(el) && /登录|扫码|login/i.test(el.textContent))) return "login";
-      if ([...document.querySelectorAll('.error-page, .error-wrapper, [role="alert"], .toast')].some(el => visible(el) && /访问频繁|操作频繁|访问受限|访问异常|稍后再试|安全验证/.test(el.textContent))) return "restricted";
+      if ([...document.querySelectorAll('.error-page, .error-wrapper, [role="alert"], [role="dialog"], [aria-modal="true"], [class*="toast"], [class*="error-tip"]')]
+        .some(el => visible(el) && /(?:访问|操作|请求)(?:过于|过度)?频繁|访问频次异常|访问受限|访问异常|稍后再试|过一会儿?再操作|安全验证/.test(el.textContent.replace(/\s+/g, "")))) return "restricted";
       return "";
     };
     const selector = '.comment-item, .comment-item-sub, div[class*="commentItem"], .parent-comment';
     const first = (node, selectors) => selectors.map(s => node.querySelector(s)).find(el => el?.textContent.trim());
+    const textSelectors = [".content .note-text", ".content", ".note-text", "span.content"];
+    const ownFirst = (item, selectors) => selectors.flatMap(s => item.querySelectorAll ? [...item.querySelectorAll(s)] : [item.querySelector(s)])
+      .find(el => el?.textContent?.trim() && (!el.closest || el.closest(selector) === item));
+    const describe = item => {
+      const textEl = ownFirst(item, textSelectors);
+      if (!textEl) return null;
+      const authorEl = ownFirst(item, [".author .name", ".name", 'a[class*="name"]']);
+      return { text: textEl.textContent.trim().slice(0, 5000),
+        author: authorEl && (!authorEl.closest || authorEl.closest(selector) === item) ? authorEl.textContent.trim().slice(0, 200) : "",
+        sourceId: item.getAttribute("data-id") || item.getAttribute("data-comment-id") || item.id || "" };
+    };
+    const identity = row => row.sourceId || `${row.author}|${row.text}`;
+    const commentKey = (row, threadKey = "", replyToAuthor = "", parentSourceId = "") => row.sourceId || `${identity(row)}|thread:${threadKey}|reply:${replyToAuthor}|parent:${parentSourceId}`;
+    session.sourceIds ||= new Map();
+    session.relations ||= new Map();
     const likes = value => {
       const match = String(value || "").replace(/,/g, "").match(/([\d.]+)\s*(万|w|k)?/i);
       return match ? Math.round(Number(match[1]) * (/万|w/i.test(match[2] || "") ? 10000 : /k/i.test(match[2] || "") ? 1000 : 1)) : 0;
     };
     const read = () => {
+      const threadRoots = new Map();
       for (const item of root.querySelectorAll(selector)) {
-        const textEl = first(item, [".content .note-text", ".content", ".note-text", "span.content"]);
-        if (!textEl) continue;
-        // A wrapper containing a child comment is not a second comment.
-        if (textEl.closest(selector) !== item) continue;
-        const text = textEl.textContent.trim().slice(0, 5000);
-        const author = first(item, [".author .name", ".name", 'a[class*="name"]'])?.textContent.trim().slice(0, 200) || "";
-        if (!text) continue;
-        const dedup = item.getAttribute("data-id") || item.id || `${author}|${text}`;
+        const details = describe(item);
+        if (!details?.text) continue;
+        const thread = item.closest?.(".parent-comment") || item.parentElement?.closest(".comment-item:not(.comment-item-sub)");
+        if (thread && !threadRoots.has(thread)) {
+          const candidates = thread.querySelectorAll ? [...thread.querySelectorAll(selector)] : [first(thread, textSelectors)?.closest(selector)];
+          threadRoots.set(thread, describe(thread) ? thread : candidates.find(node => node &&
+            !node.closest?.('.comment-item-sub, [class*="commentItemSub"]') && describe(node)));
+        }
+        const threadItem = threadRoots.get(thread);
+        const threadDetails = threadItem && threadItem !== item ? describe(threadItem) : null;
+        const threadKey = threadDetails ? commentKey(threadDetails) : "";
+        const target = ownFirst(item, [".reply-to .name", ".reply-to-name", ".reply-to", ".reply-name"]);
+        const replyToAuthor = target && (!target.closest || target.closest(selector) === item)
+          ? target.textContent.trim().replace(/^回复\s*[@＠]?/, "").replace(/[：:]\s*$/, "").slice(0, 200) : "";
+        const parentSourceId = ["data-reply-to-id", "data-reply-id", "data-parent-id"].map(name => item.getAttribute(name))
+          .find(value => value && value !== "0" && value !== "-1" && value !== details.sourceId) || "";
+        const dedup = commentKey(details, threadKey, replyToAuthor, parentSourceId);
         const old = comments.get(dedup);
         if (!old && comments.size >= limits.maxComments) break;
-        comments.set(dedup, { id: old?.id || `xhs-${comments.size + 1}`, parentCommentId: null, author: author || old?.author || "", text,
-          likeCount: likes(first(item, [".like .count", ".like-wrapper .count", 'span[class*="count"]'])?.textContent), publishedAt: "" });
+        const id = old?.id || `xhs-${comments.size + 1}`;
+        comments.set(dedup, { id, parentCommentId: null, threadRootId: null,
+          isReply: !!(threadKey || parentSourceId || replyToAuthor || item.matches?.('.comment-item-sub, [class*="commentItemSub"]')),
+          replyToAuthor, author: details.author || old?.author || "", text: details.text,
+          likeCount: likes(ownFirst(item, [".like .count", ".like-wrapper .count", 'span[class*="count"]'])?.textContent), publishedAt: "" });
+        if (details.sourceId) session.sourceIds.set(details.sourceId, id);
+        session.relations.set(id, { parentSourceId, threadKey });
+      }
+      // Resolve after the scan: a referenced comment may appear later in the
+      // DOM or in a subsequent round. A nickname alone cannot identify it.
+      for (const row of comments.values()) {
+        const relation = session.relations.get(row.id);
+        row.parentCommentId = session.sourceIds.get(relation?.parentSourceId) || null;
+        row.threadRootId = comments.get(relation?.threadKey)?.id || null;
       }
     };
     const targets = [".note-scroller", ".comments-container", ".comments-el"].map(s => root.querySelector(s) || document.querySelector(s)).filter(Boolean);
     const scroll = targets.find(el => el.scrollHeight > el.clientHeight + 20) || targets[0] || document.scrollingElement;
     const previousScroll = scroll.scrollTop;
-    if (resume) scroll.scrollTop = session.scrollTop;
+    if (resume && !blocked() && !session.stop) scroll.scrollTop = session.scrollTop;
     let stable = 0, stopReason = "round_limit";
     const clicked = session.clicked;
     try {
@@ -222,31 +260,49 @@ async function panoramaCollectComments(expected, options = {}, requestId = "", r
           if (link && !["", "#"].includes(link.getAttribute("href"))) continue;
           if ([...el.children].some(child => child.textContent.trim() === label)) continue;
           clicked.add(el); el.click(); expanded++;
-          if (expanded >= 15) break;
+          break;
         }
-        scroll.scrollTop = scroll.scrollHeight;
-        await sleep(850);
-        if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
+        // One page action at a time, followed by a fixed minimum pause. This
+        // reduces request bursts; it is not a promise of a safe platform quota.
+        if (!expanded) scroll.scrollTop = scroll.scrollHeight;
+        let interruptionAfterAction = "";
+        for (let waited = 0; waited < 3000; waited += 250) {
+          interruptionAfterAction = blocked() || (session.stop ? "user" : "");
+          if (interruptionAfterAction) break;
+          await sleep(250);
+          if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
+        }
         read(); progress();
-        if (session.stop) { stopReason = "user"; break; }
-        const afterLoad = blocked();
+        const afterLoad = interruptionAfterAction || blocked() || (session.stop ? "user" : "");
         if (afterLoad) { stopReason = afterLoad; break; }
         if (comments.size >= limits.maxComments) { stopReason = "count_limit"; break; }
         stable = comments.size === before && expanded === 0 ? stable + 1 : 0;
         if (stable >= limits.idleRounds) { stopReason = "idle"; break; }
       }
-    } finally { session.scrollTop = scroll.scrollTop; if (current()) scroll.scrollTop = previousScroll; }
+    } finally {
+      session.scrollTop = scroll.scrollTop;
+      // Restoring the scroll position can itself load more content. Do not
+      // cause any further page actions once the site asks us to stop.
+      if (current() && !["verification", "restricted", "login"].includes(stopReason) && !blocked()) scroll.scrollTop = previousScroll;
+    }
     const reasons = {
       idle: `连续 ${limits.idleRounds} 轮没有新增评论或展开回复，已停止获取。`,
       count_limit: `已达到你设置的 ${limits.maxComments} 条上限。调高获取设置后，可继续获取。`,
-      round_limit: `已完成你设置的 ${limits.maxRounds} 轮滚动。可继续获取，或分析已有评论。`,
+      round_limit: `已完成你设置的 ${limits.maxRounds} 轮获取。可继续获取，或分析已有评论。`,
       user: "已按你的操作停止获取。",
       verification: "网页出现验证，已暂停获取。请在小红书网页完成验证后，再决定是否继续。",
       login: "网页要求登录，已暂停获取。请先在小红书网页登录。",
-      restricted: "网页提示访问异常或操作频繁，已暂停获取。请按网页提示处理后再试。",
+      restricted: "网页提示操作过于频繁或访问异常，本次获取已停止。请暂停操作并按网页提示等待；已获取的评论可直接分析或导出。",
     };
     if (!comments.size && !["user", "verification", "login", "restricted"].includes(stopReason)) return fail("没有读取到评论。请登录小红书，打开笔记详情并确认评论区已显示后重试。", "NO_COMMENTS");
+    const bodyEl = root.querySelector("#detail-desc, .note-content .desc, .note-content .note-text");
+    const body = bodyEl && !bodyEl.closest?.(".comments-container, .comments-el, .comments-list, .comment-item, .comment-item-sub")
+      ? (bodyEl.innerText || bodyEl.textContent || "").trim() : "";
+    const note = { title: root.querySelector("#detail-title, .note-content .title")?.textContent?.trim() || expected.title || document.title || "",
+      author: root.querySelector(".author-container .username, .author-wrapper .name")?.textContent?.trim() || "",
+      text: body.slice(0, 20000), truncated: body.length > 20000 };
     return { success: true, comments: [...comments.values()], source: "小红书页面评论", truncated: stopReason !== "idle",
+      note, info: { title: note.title, channelName: note.author, description: note.text, duration: 0 },
       stopReason, stopMessage: reasons[stopReason], rounds: roundNumber, limits,
       notice: "按去重后的评论计数，包含已展开的回复；仅代表页面已读取内容，不代表全部评论。" };
   } catch {

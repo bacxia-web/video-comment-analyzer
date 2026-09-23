@@ -16,7 +16,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}/`;
-    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.5');
+    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.7');
     await worker.evaluate(() => {
       const originalFetch = fetch;
       globalThis.fixtureRequests = [];
@@ -91,7 +91,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
       let body = '<h1>Fixture</h1>';
       if (url.hostname.endsWith('youtube.com')) body = `<h1 class="ytd-watch-metadata">YouTube fixture</h1><video></video><script>window.ytInitialPlayerResponse={videoDetails:{videoId:'${url.searchParams.get('v')}',title:'YouTube fixture',author:'Creator',lengthSeconds:'10'},captions:{playerCaptionsTracklistRenderer:{captionTracks:[{languageCode:'en',baseUrl:'https://www.youtube.com/api/timedtext?v=${url.searchParams.get('v')}'}]}}};</script>`;
       if (url.hostname === 'www.bilibili.com') body = '<h1 class="video-title">B站测试视频</h1><video></video>';
-      if (url.hostname === 'www.xiaohongshu.com') body = `<div class="note-detail-mask"><h1 id="detail-title">小红书测试笔记</h1><div class="note-scroller" style="height:300px;overflow:auto"><div class="comments-container"><div class="parent-comment"><div class="comment-item" data-id="1"><div class="author"><span class="name">作者甲</span></div><div class="content"><span class="note-text">真实评论 &lt;img src=x onerror=alert(1)&gt;</span></div><div class="like"><span class="count">1.2万</span></div></div></div><div class="comment-item" data-id="2"><div class="author"><span class="name">作者乙</span></div><div class="content">第二条评论</div></div><div class="comment-item" data-id="2"><div class="content">第二条评论</div></div><div class="reply-more">展开 1 条回复</div></div></div></div><script>document.querySelector('.reply-more').onclick=()=>{const item=document.createElement('div');item.className='comment-item-sub';item.innerHTML='<div class="author"><span class="name">回复者</span></div><div class="content">新增回复</div>';document.querySelector('.comments-container').append(item);document.querySelector('.reply-more').remove();};</script>`;
+      if (url.hostname === 'www.xiaohongshu.com') body = `<div id="detail-desc">其他笔记的正文，不应被读取。</div><div class="note-detail-mask"><h1 id="detail-title">小红书测试笔记</h1><div class="author-container"><span class="username">笔记作者</span></div><div class="note-content"><div id="detail-desc">这篇只讨论室内使用，不讨论户外效果。</div></div><div class="note-scroller" style="height:300px;overflow:auto"><div class="comments-container"><div class="parent-comment"><div class="comment-item" data-id="1"><div class="author"><span class="name">作者甲</span></div><div class="content">真实评论 &lt;img src=x onerror=alert(1)&gt;</div><div class="like"><span class="count">1.2万</span></div></div><div class="reply-more">展开 1 条回复</div></div><div class="comment-item" data-id="2"><div class="author"><span class="name">作者乙</span></div><div class="content">第二条评论</div></div><div class="comment-item" data-id="2"><div class="content">第二条评论</div></div></div></div></div><script>document.querySelector('.reply-more').onclick=()=>{const item=document.createElement('div');item.className='comment-item-sub';item.dataset.id='3';item.dataset.replyToId='1';item.innerHTML='<div class="author"><span class="name">回复者</span></div><div class="content"><span class="note-text"><span class="reply-to">回复 作者甲：</span>新增回复</span></div>';document.querySelector('.parent-comment').append(item);document.querySelector('.reply-more').remove();};</script>`;
       const headers = url.searchParams.has('strict') ? {'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; require-trusted-types-for 'script'"} : {};
       return route.fulfill({contentType:'text/html; charset=utf-8',headers,body:`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`});
     });
@@ -299,7 +299,25 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     const [download]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportData').click()]);
     const exported=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
     assert.equal(exported.comments.length,3); assert.ok(!JSON.stringify(exported).includes('fixture-updated-key'));
+    assert.equal(exported.note.text,'这篇只讨论室内使用，不讨论户外效果。');
+    assert.equal(exported.note.author,'笔记作者');
+    const reply=exported.comments.find(row=>row.text.includes('新增回复'));
+    const parent=exported.comments.find(row=>row.author==='作者甲');
+    assert.equal(reply.parentCommentId,parent.id);assert.equal(reply.threadRootId,parent.id);
+    assert.equal(reply.replyToAuthor,'作者甲');
+    const contextualInput=await worker.evaluate(()=>fixtureRequests.map(request=>{
+      try{return JSON.parse(JSON.parse(request.body).messages.at(-1).content);}catch{return {};}
+    }).filter(input=>input.task==='xhs_batch').at(-1));
+    assert.deepEqual(contextualInput.note,exported.note);
+    assert.equal(contextualInput.comments.find(row=>row.id===reply.id).parentCommentId,parent.id);
+    assert.equal(contextualInput.contextComments.length,0,'a parent in the target batch is already available');
+    assert.match(await panel.locator('#results .xhs-context').allTextContents().then(values=>values.join('\n')),/回复的评论.*作者甲/);
+    const [contextReportDownload]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportReport').click()]);
+    const contextReport=fs.readFileSync(await contextReportDownload.path(),'utf8');
+    assert.match(contextReport,/笔记正文（分析参考）/);assert.match(contextReport,/只讨论室内使用/);
+    assert.match(contextReport,/回复的评论（作者甲）/);
     console.log('PASS reused XHS DOM selectors, expansion, wrapper/duplicate filtering, like counts and key-free export');
+    console.log('PASS scoped note text, explicit reply context in AI inputs, source display and JSON/Markdown exports');
 
     await settings.locator('#xiaohongshuSettings summary').click();
     await settings.locator('#xhsMaxComments').fill('5001');
@@ -398,6 +416,39 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await panel.waitForFunction(()=>document.getElementById('analyze').textContent.includes('12')&&!document.getElementById('analyze').disabled);
     assert.match(await panel.locator('#status').textContent(),/连续 2 轮/);
     console.log('PASS stop-and-analyze partial comments, visible verification pause and configured idle threshold');
+
+    await page.evaluate(()=>{
+      window.fixtureReplyClicks=[];
+      for(let i=0;i<3;i++){
+        const button=document.createElement('button');button.textContent='展开 1 条回复';
+        button.onclick=()=>{
+          fixtureReplyClicks.push(performance.now());
+          if(fixtureReplyClicks.length===2){
+            const toast=document.createElement('div');toast.className='reds-toast';
+            toast.textContent='操作过于频繁，过一会儿再操作';document.body.append(toast);
+          }
+        };
+        document.querySelector('.comments-container').append(button);
+      }
+    });
+    const beforeRateLimit=await worker.evaluate(()=>fixtureRequests.length);
+    await panel.locator('#collect').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('操作过于频繁'));
+    const replyClicks=await page.evaluate(()=>fixtureReplyClicks);
+    assert.equal(replyClicks.length,2,'the frequency warning must stop before the third expansion');
+    assert.ok(replyClicks[1]-replyClicks[0]>=3000,'reply expansion must be paced in the real browser');
+    assert.equal(await panel.locator('#collect').isDisabled(),true);
+    assert.equal(await panel.locator('#continueCollect').isVisible(),false);
+    assert.equal(await panel.locator('#analyze').isEnabled(),true);
+    assert.match(await panel.locator('#analyze').textContent(),/12 条/);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),beforeRateLimit);
+    await panel.evaluate(()=>runXhs(false,true));
+    assert.equal(await page.evaluate(()=>fixtureReplyClicks.length),2);
+    await panel.locator('#analyze').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'));
+    assert.deepEqual((await panel.locator('.xhs-metrics dd').allTextContents()).slice(0,2),['12','12']);
+    assert.equal(await page.evaluate(()=>fixtureReplyClicks.length),2,'analysis must reuse captured comments without further page actions');
+    console.log('PASS paced XHS expansion, reported frequency warning, blocked retry controls and analysis of retained comments');
 
     for (const width of [320,375,414,768]) {
       await panel.setViewportSize({width,height:900});

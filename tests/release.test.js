@@ -20,7 +20,7 @@ test("manifest uses minimized install-time permissions", () => {
     manifest.host_permissions.includes("https://www.googleapis.com/*"),
   );
   assert.equal(Object.hasOwn(manifest, "optional_host_permissions"), false);
-  assert.equal(manifest.version, "0.2.5");
+  assert.equal(manifest.version, "0.2.7");
 });
 
 test("unified release includes setup, platform scope, install instructions and privacy", () => {
