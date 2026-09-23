@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
-const state = { context: null, mode: "video", data: null, analysis: null, busy: false, revision: 0, refresh: 0, windowId: null };
+const state = { context: null, mode: "video", data: null, analysis: null, busy: false, revision: 0, refresh: 0, windowId: null,
+  requestId: null, phase: "", analysisFailed: false, xhsWithAnalysis: false, redirecting: false };
 const sentiment = PANORAMA_COPY.sentiments;
 const send = message => chrome.runtime.sendMessage(message);
 const node = (tag, text, className) => {
@@ -12,6 +13,15 @@ function updateControls() {
   const allowed = !!state.context?.[state.mode];
   $("analyze").disabled = $("collect").disabled = state.busy || !allowed;
   $("analyze").textContent = state.analysis ? "重新分析" : "开始分析";
+  const xhs = state.context?.platform === "xiaohongshu";
+  document.body.dataset.platform = state.context?.platform || "";
+  $("usageNotice").textContent = xhs ? "AI 分析使用你的 DeepSeek 额度；只获取评论不调用 AI。"
+    : "「开始分析」会获取内容并发送给 DeepSeek，按你的账户计费。「只获取内容」不调用 AI，但可能消耗 YouTube 或 Supadata 的额度。";
+  $("resultScope").textContent = xhs ? "评论结论仅代表本次获取的内容。" : "视频摘要只分析字幕，不识别画面。评论结论仅代表本次获取的内容。";
+  $("xhsSettingsLink").hidden = !xhs;
+  $("continueCollect").hidden = !xhs || !state.data || state.busy;
+  $("collect").textContent = xhs && state.data ? "重新获取" : "只获取内容";
+  if (xhs && state.data?.comments.length) $("analyze").textContent = state.analysisFailed ? "重试分析" : state.analysis ? "重新分析已有评论" : `分析已获取的 ${state.data.comments.length} 条`;
   for (const button of document.querySelectorAll("[data-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
     button.disabled = state.busy || !!state.context && !state.context[button.dataset.mode];
@@ -21,28 +31,43 @@ function updateControls() {
   $("hint").textContent = !state.context ? "支持 YouTube、哔哩哔哩视频，小红书笔记和雪球帖子。请打开内容详情页，再点击右下角「分析」。"
     : state.mode === "video" ? "根据当前视频的字幕生成摘要。结果中的时间可以点击，直接跳到对应片段。"
     : state.context.platform === "youtube" ? "获取当前视频的评论和回复，整理讨论主题与观众意见。需要填写 YouTube Data API Key。"
-    : state.context.platform === "xiaohongshu" ? "获取当前笔记的评论，整理讨论主题与用户意见。过程中会自动滚动、展开评论，请保持当前笔记打开。"
+    : state.context.platform === "xiaohongshu" ? "获取过程中会自动滚动、展开回复，请保持当前笔记打开。"
     : "获取当前帖子的评论，整理讨论主题与用户意见。请先登录雪球。";
 }
 function resetResults() {
   state.data = state.analysis = null;
+  state.analysisFailed = false; state.requestId = null; state.phase = "";
+  PANORAMA_XHS_UI.reset(); $("stopCollect").hidden = true;
   $("results").replaceChildren(); $("rawContent").replaceChildren();
   for (const id of ["results", "raw", "exportData", "exportReport", "fixSettings"]) $(id).hidden = true;
   status("");
 }
 async function refreshContext() {
+  if (state.redirecting) return;
   const request = ++state.refresh;
   try {
     const [tab] = await chrome.tabs.query({ active: true, windowId: state.windowId });
+    if (state.context?.platform === "xiaohongshu" && ["preferences.html", "options.html"].some(path => {
+      const url = chrome.runtime.getURL(path); return tab?.url === url || tab?.url?.startsWith(`${url}#`);
+    })) return;
     const parsed = PANORAMA_PLATFORMS.parse(tab?.url);
     if (request !== state.refresh) return;
     if (state.context?.key === parsed?.key && state.context?.tabId === tab?.id) return;
+    if (state.busy && state.context?.platform === "xiaohongshu" && state.phase === "collect") {
+      send({ action: "mediaStopCollect", tabId: state.context.tabId, key: state.context.key, requestId: state.requestId }).catch(() => {});
+    } else if (state.busy && state.context?.platform === "xiaohongshu") {
+      send({ action: "mediaCancelAnalysis", tabId: state.context.tabId, key: state.context.key, requestId: state.requestId }).catch(() => {});
+    }
+    if (parsed?.platform === "youtube") {
+      state.redirecting = true;
+      location.replace(chrome.runtime.getURL("sidepanel.html"));
+      return;
+    }
     state.revision++; state.busy = false; resetResults();
     state.context = parsed ? { ...parsed, tabId: tab.id, title: tab.title || parsed.label } : null;
     $("platform").textContent = parsed?.label || "当前页面";
     $("title").textContent = state.context?.title || "先打开要分析的内容";
     $("author").textContent = "";
-    $("legacy").hidden = parsed?.platform !== "youtube";
     if (parsed && !parsed[state.mode]) state.mode = parsed.video ? "video" : "comments";
     updateControls();
     if (!parsed) return;
@@ -85,6 +110,7 @@ function section(title) { const section = node("section", "", "result-section");
 function renderAnalysis() {
   $("results").replaceChildren(); $("results").hidden = $("exportReport").hidden = false;
   const analysis = state.analysis;
+  if (analysis.schema === "xhs-v1") { PANORAMA_XHS_UI.render($("results"), state.data, analysis); return; }
   if (state.mode === "video") {
     const chapters = section("视频章节");
     for (const chapter of analysis.chapters || []) {
@@ -115,6 +141,7 @@ function renderAnalysis() {
 }
 async function run(withAnalysis) {
   if (state.busy || !state.context?.[state.mode]) return;
+  if (state.context.platform === "xiaohongshu" && state.mode === "comments") return runXhs(withAnalysis);
   const revision = state.revision;
   if (withAnalysis && !await PANORAMA_SETUP.ensure()) return;
   if (revision !== state.revision || state.busy) return;
@@ -143,6 +170,71 @@ async function run(withAnalysis) {
   } catch { if (valid()) status("连接中断，请重新打开插件或稍后重试。", "error"); }
   finally { if (valid()) { state.busy = false; updateControls(); } }
 }
+async function runXhs(withAnalysis, resume = false) {
+  if (state.busy || state.context?.platform !== "xiaohongshu") return;
+  const revision = state.revision;
+  if (withAnalysis && !await PANORAMA_SETUP.ensure()) return;
+  if (revision !== state.revision || state.busy) return;
+  if (resume) {
+    try {
+      const stored = await chrome.storage.local.get(YTD_SETTINGS.XHS_STORAGE_KEY);
+      const limits = YTD_SETTINGS.normalizeXhs(stored[YTD_SETTINGS.XHS_STORAGE_KEY]);
+      if (state.data.comments.length >= limits.maxComments) {
+        status(`已达到 ${limits.maxComments} 条上限。请先点击「调整小红书获取范围」调高上限，再继续获取。`); return;
+      }
+    } catch { status("未能读取获取设置，请重新打开插件后重试。", "error"); return; }
+    if (revision !== state.revision || state.busy) return;
+  }
+  const needsCollection = resume || !withAnalysis || !state.data?.comments.length;
+  if (needsCollection && !resume) resetResults();
+  const context = { ...state.context }, requestId = crypto.randomUUID();
+  const valid = () => revision === state.revision && state.requestId === requestId;
+  state.requestId = requestId; state.busy = true; state.xhsWithAnalysis = withAnalysis;
+  state.analysisFailed = false; updateControls(); $("fixSettings").hidden = true;
+  try {
+    if (needsCollection) {
+      state.phase = "collect"; status("");
+      PANORAMA_XHS_UI.progress("collect", { count: resume ? state.data.comments.length : 0, analyzed: 0, total: 0,
+        round: 0, maxRounds: null, batchCount: 0, completedBatches: 0 });
+      $("stopCollect").hidden = false; $("stopCollect").disabled = false;
+      $("stopCollect").textContent = withAnalysis ? "停止获取，分析已有评论" : "停止获取";
+      const data = await send({ action: "mediaCollect", tabId: context.tabId, key: context.key, mode: "comments", requestId, resume });
+      if (!valid()) return;
+      $("stopCollect").hidden = true;
+      if (!data?.success) { showError(data); PANORAMA_XHS_UI.progress("collected", { stopMessage: PANORAMA_COPY.error(data) }); return; }
+      state.data = data; state.analysis = null; state.context = data.context;
+      $("results").hidden = $("exportReport").hidden = true; $("results").replaceChildren();
+      $("title").textContent = data.context.title; $("author").textContent = data.context.channelName || "";
+      renderData(); state.phase = "collected";
+      PANORAMA_XHS_UI.progress("collected", { count: data.comments.length, stopMessage: data.stopMessage });
+      status(`${data.stopMessage} ${data.notice}`);
+      if (!data.comments.length) return;
+      // A limit or site interruption needs an explicit choice, not an implicit
+      // assumption that all comments have been collected.
+      if (!withAnalysis || !["idle", "user"].includes(data.stopReason)) return;
+    }
+    state.phase = "analyze"; state.analysis = null;
+    $("results").hidden = $("exportReport").hidden = true; $("results").replaceChildren();
+    const count = state.data.comments.length;
+    PANORAMA_XHS_UI.progress("analyze", { count, total: count, analyzed: 0, completedBatches: 0, batchCount: 0 });
+    status(`正在分析已获取的 ${count} 条评论，无需重新获取。`, "loading");
+    const result = await send({ action: "mediaAnalyze", tabId: context.tabId, key: context.key, mode: "comments",
+      requestId, info: state.data.context, comments: state.data.comments });
+    if (!valid()) return;
+    if (!result?.success) {
+      state.analysisFailed = true; showError(result); PANORAMA_XHS_UI.progress("error"); return;
+    }
+    state.analysis = result.analysis; state.phase = "complete"; renderAnalysis();
+    PANORAMA_XHS_UI.progress("complete", { analyzed: result.analysis.totalAnalyzed, total: count });
+    status(`分析完成，已分析 ${count} 条评论。${state.data.stopMessage} ${state.data.notice}`, "success");
+  } catch {
+    if (valid()) {
+      state.analysisFailed = state.phase === "analyze" || state.phase === "merge";
+      status("连接中断。已获取的评论仍在，可重试分析或继续获取。", "error");
+      PANORAMA_XHS_UI.progress(state.analysisFailed ? "error" : "collected", { stopMessage: "获取连接中断，请重新获取或分析已有评论。" });
+    }
+  } finally { if (valid()) { state.busy = false; $("stopCollect").hidden = true; updateControls(); } }
+}
 function download(content, extension, type) {
   const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob);
   const link = document.createElement("a"); link.href = url;
@@ -161,6 +253,8 @@ $("exportReport").onclick = () => {
   if (state.mode === "video") {
     for (const chapter of state.analysis.chapters || []) lines.push(`## ${chapter.timestamp} ${chapter.title}`, "", chapter.summary, "");
     lines.push("## 关键引用", ""); for (const quote of state.analysis.keyQuotes || []) lines.push(`> [${quote.timestamp}] ${quote.quote}`, "");
+  } else if (state.analysis.schema === "xhs-v1") {
+    lines.push(...PANORAMA_XHS_UI.report(state.data, state.analysis));
   } else {
     lines.push(state.analysis.summary, "");
     for (const topic of state.analysis.topics || []) {
@@ -175,18 +269,42 @@ $("exportReport").onclick = () => {
 };
 $("settings").onclick = $("fixSettings").onclick = () => chrome.runtime.openOptionsPage();
 $("analyze").onclick = () => run(true); $("collect").onclick = () => run(false);
+$("continueCollect").onclick = () => runXhs(state.xhsWithAnalysis, true);
+$("stopCollect").onclick = async () => {
+  if (!state.busy || state.phase !== "collect") return;
+  const requestId = state.requestId;
+  $("stopCollect").disabled = true; $("stopCollect").textContent = "正在停止获取…";
+  try {
+    const result = await send({ action: "mediaStopCollect", tabId: state.context.tabId, key: state.context.key, requestId });
+    if (state.requestId === requestId && !result?.success) throw new Error("stop failed");
+  } catch {
+    if (state.requestId === requestId && state.phase === "collect") {
+      $("stopCollect").disabled = false; $("stopCollect").textContent = "停止未完成，点击重试";
+    }
+  }
+};
 for (const button of document.querySelectorAll("[data-mode]")) button.onclick = () => {
   if (state.busy || button.dataset.mode === state.mode) return;
   state.revision++; state.mode = button.dataset.mode; resetResults(); updateControls();
 };
 chrome.tabs.onActivated.addListener(info => { if (info.windowId === state.windowId) refreshContext(); });
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.url || change.status === "complete") refreshContext(); });
-chrome.runtime.onMessage.addListener(message => {
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (!state.busy || !state.context) return;
+  if (state.context.platform === "xiaohongshu") {
+    if (sender.id !== chrome.runtime.id || message.action !== "mediaProgress" || message.key !== state.context.key || message.requestId !== state.requestId) return;
+    if (message.phase === "collect" && state.phase !== "collect") return;
+    state.phase = message.phase; PANORAMA_XHS_UI.progress(message.phase, message); return;
+  }
   if (message.action === "mediaProgress" && message.key === state.context.key ||
     message.action === "commentsProgress" && state.context.platform === "youtube" && message.videoId === state.context.id) {
     status(`正在获取评论… 已获取 ${message.count} 条，请保持当前页面打开。`, "loading");
   }
+});
+window.addEventListener("pagehide", () => {
+  if (!state.busy || state.context?.platform !== "xiaohongshu") return;
+  send({ action: state.phase === "collect" ? "mediaStopCollect" : "mediaCancelAnalysis",
+    tabId: state.context.tabId, key: state.context.key, requestId: state.requestId }).catch(() => {});
 });
 (async () => {
   try { state.windowId = (await chrome.windows.getCurrent()).id; await refreshContext(); }

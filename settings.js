@@ -6,6 +6,18 @@
  */
 var YTD_SETTINGS = (() => {
   const STORAGE_KEY = "ytd_settings";
+  const XHS_STORAGE_KEY = "xhs_collection_settings";
+  const XHS_LIMITS = Object.freeze({
+    maxComments: { default: 1000, min: 100, max: 5000 },
+    maxRounds: { default: 20, min: 5, max: 200 },
+    idleRounds: { default: 3, min: 2, max: 10 },
+  });
+  function normalizeXhs(input = {}) {
+    return Object.fromEntries(Object.entries(XHS_LIMITS).map(([key, range]) => {
+      const value = Number(input?.[key]);
+      return [key, Number.isInteger(value) && value >= range.min && value <= range.max ? value : range.default];
+    }));
+  }
   const DEFAULTS = Object.freeze({
     provider: "deepseek",
     aiApiKey: "",
@@ -61,6 +73,9 @@ var YTD_SETTINGS = (() => {
 
   return {
     STORAGE_KEY,
+    XHS_STORAGE_KEY,
+    XHS_LIMITS,
+    normalizeXhs,
     DEFAULTS,
     isLegacyCustom,
     normalize,

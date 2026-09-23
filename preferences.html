@@ -10,10 +10,22 @@
 <p id="youtubeQuota" class="quota"><strong>默认免费额度：每个项目每天 10,000 单位。</strong><br>一次请求消耗 1 单位，最多获取 100 条主评论。获取更多评论、补充回复会继续消耗额度；同一项目的其他调用也可能共用额度。<br><a href="https://developers.google.com/youtube/v3/getting-started#quota" target="_blank" rel="noopener noreferrer">官方额度说明 ↗</a> · <a href="https://developers.google.com/youtube/v3/docs/commentThreads/list" target="_blank" rel="noopener noreferrer">评论用量说明 ↗</a></p></section>
 <details id="optionalServices"><summary>Supadata 字幕服务（可选）</summary>
 <label for="supadataKey">Supadata API Key（可选）</label><input id="supadataKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="supadataHelp supadataQuota">
-<p id="supadataHelp" class="help">做视频摘要时，优先读取网页字幕；YouTube 字幕读不到时，用它作为备用。使用「YouTube 字幕学习」获取字幕时也需要此密钥。<br><a href="https://dash.supadata.ai/" target="_blank" rel="noopener noreferrer">申请 Supadata API Key ↗</a></p>
+<p id="supadataHelp" class="help">优先读取 YouTube 网页字幕；读不到时，可用这个备用服务重试。字幕翻译、中英对照不强制要求此密钥。<br><a href="https://dash.supadata.ai/" target="_blank" rel="noopener noreferrer">申请 Supadata API Key ↗</a></p>
 <p id="supadataQuota" class="quota"><strong>免费方案：每月 100 积分，无需信用卡。</strong><br>获取一次已有字幕消耗 1 积分，约可请求 100 次；未找到字幕也可能扣除积分。未用完的积分不累计到下月。插件不会把无字幕视频转写成文字。<br><a href="https://supadata.ai/pricing" target="_blank" rel="noopener noreferrer">官方定价与额度 ↗</a> · <a href="https://docs.supadata.ai/get-transcript" target="_blank" rel="noopener noreferrer">字幕用量说明 ↗</a></p></details>
 <div class="actions"><button class="primary" type="submit">保存设置</button></div><p id="saveStatus" role="status"></p></form>
+<details id="xiaohongshuSettings"><summary>小红书评论获取设置</summary>
+<p class="help">默认值适合先试用。任一停止条件先达到就会结束获取，只有获取不够时再逐步调高。这些数值是插件的停止条件，不是小红书公布的安全阈值。</p>
+<form id="xhsSettingsForm">
+<label for="xhsMaxComments">评论数量上限</label><input id="xhsMaxComments" type="number" min="100" max="5000" step="1" required aria-describedby="xhsCountHelp">
+<p class="help" id="xhsCountHelp">默认 1,000 条，可设为 100～5,000 条，按去重后的评论计数。达到上限会暂停；调高后可继续获取。已获取评论会全部分批分析，数量越多，分析耗时和 DeepSeek 用量越大。</p>
+<label for="xhsMaxRounds">每次最多滚动多少轮</label><input id="xhsMaxRounds" type="number" min="5" max="200" step="1" required aria-describedby="xhsRoundsHelp">
+<p class="help" id="xhsRoundsHelp">默认 20 轮，可设为 5～200 轮。每轮会读取评论、展开回复并滚动页面；调高可尝试获取更多内容，也会延长等待、增加页面操作。</p>
+<label for="xhsIdleRounds">连续几轮没有新增后停止</label><input id="xhsIdleRounds" type="number" min="2" max="10" step="1" required aria-describedby="xhsIdleHelp">
+<p class="help" id="xhsIdleHelp">默认 3 轮，可设为 2～10 轮。网络较慢时可适度调高，减少提前结束；过高会在没有更多评论时继续等待。停止不代表已获取平台全部评论。</p>
+<p class="quota">自动滚动和展开回复可能触发网站验证码或访问限制，任何设置都不能保证账号不受限制。出现验证、登录失效或访问异常时会暂停；请在网页处理后再决定是否继续。这里只调整获取范围，不提高操作速度。</p>
+<div class="actions"><button class="primary" type="submit">保存获取设置</button><button id="resetXhsSettings" type="button">恢复默认值</button></div>
+<p id="xhsSaveStatus" role="status"></p></form></details>
 <p class="muted fine">密钥只保存在当前 Chrome 中，调用服务时发送给对应服务商，不会同步到 GitHub。保存设置不会验证密钥，可用性会在使用时检查。</p>
 <p class="muted fine">额度核实于 2026-09-21，以服务商账户显示为准。YouTube 和 Supadata 的免费额度不包含 DeepSeek 的 AI 费用。</p>
-<footer><button id="clearKeys" class="quiet">清除所有服务密钥</button><p class="muted fine">分析面板和字幕学习共用这里的密钥。</p></footer>
+<footer><button id="clearKeys" class="quiet">清除所有服务密钥</button><p class="muted fine">所有平台和功能共用这里的密钥。</p></footer>
 </main><script src="settings.js"></script><script src="setup.js"></script><script src="preferences.js"></script></body></html>

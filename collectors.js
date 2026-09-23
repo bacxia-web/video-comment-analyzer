@@ -28,8 +28,12 @@ async function panoramaReadVideo(expected, withTranscript) {
         description: details?.shortDescription || "", duration: Number(details?.lengthSeconds) || 0 };
       if (!withTranscript) return { success: true, info };
       const tracks = [...(response?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [])];
-      tracks.sort((a, b) => (b.languageCode?.startsWith("zh") ? 2 : b.kind !== "asr" ? 1 : 0) -
-        (a.languageCode?.startsWith("zh") ? 2 : a.kind !== "asr" ? 1 : 0));
+      // Preserve the video's source language; translated tracks must not replace
+      // the original in the transcript's original / Chinese / bilingual modes.
+      const audioLanguage = response?.microformat?.playerMicroformatRenderer?.defaultAudioLanguage;
+      const score = track => (audioLanguage && track.languageCode === audioLanguage ? 4 : 0) +
+        (track.kind === "asr" ? 2 : 0) - (track.vssId?.startsWith("t.") ? 8 : 0);
+      tracks.sort((a, b) => score(b) - score(a));
       for (const track of tracks.slice(0, 3)) {
         try {
           const url = new URL(track.baseUrl);
@@ -53,7 +57,7 @@ async function panoramaReadVideo(expected, withTranscript) {
           }
           rows = rows.filter(row => row.text.trim());
           if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
-          if (rows.length) return { success: true, info, rows, source: "YouTube 网站字幕" };
+          if (rows.length) return { success: true, info, rows, language: track.languageCode || "", source: "YouTube 网站字幕" };
         } catch { /* The native caption endpoint may reject this session. Try the visible transcript. */ }
       }
       const rows = [...document.querySelectorAll("ytd-transcript-segment-renderer")].map(node => {
@@ -97,12 +101,14 @@ async function panoramaReadVideo(expected, withTranscript) {
   }
 }
 
-async function panoramaCollectComments(expected) {
+async function panoramaCollectComments(expected, options = {}, requestId = "", resume = false) {
   const current = () => location.pathname.split("/").filter(Boolean).at(-1) === expected.id;
   const fail = (message, error = "COMMENT_FETCH_FAILED") => ({ success: false, error, message });
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const comments = new Map();
-  const progress = () => chrome.runtime.sendMessage({ action: "mediaProgress", key: expected.key, count: comments.size }).catch(() => {});
+  let comments = new Map();
+  let roundNumber = 0;
+  const progress = () => chrome.runtime.sendMessage({ action: "mediaProgress", key: expected.key, requestId,
+    phase: "collect", count: comments.size, round: roundNumber, maxRounds: options.maxRounds }).catch(() => {});
   if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
   // Prevent two open panels from scrolling the same page concurrently.
   if (globalThis.__panoramaCollecting) return fail("正在获取这个页面的评论，请等待当前操作完成。");
@@ -143,6 +149,28 @@ async function panoramaCollectComments(expected) {
     // Selectors and scroll/expand workflow adapted from Xiaohongshu-Comment-analysis.
     // Scope to the open note so feed text or another note cannot become evidence.
     const root = document.querySelector(".note-detail-mask, #noteContainer, .note-container") || document;
+    const limits = {
+      maxComments: Math.max(100, Math.min(5000, Number(options.maxComments) || 1000)),
+      maxRounds: Math.max(5, Math.min(200, Number(options.maxRounds) || 20)),
+      idleRounds: Math.max(2, Math.min(10, Number(options.idleRounds) || 3)),
+    };
+    const previous = globalThis.__panoramaXhsSession;
+    if (resume && (!previous || previous.key !== expected.key || previous.root !== root)) {
+      return fail("页面已刷新，无法继续上次获取。可以分析已获取的评论，或重新获取。", "COLLECTION_SESSION_EXPIRED");
+    }
+    const session = resume ? previous : { key: expected.key, root, comments: new Map(), clicked: new WeakSet(), scrollTop: 0 };
+    comments = session.comments;
+    session.requestId = requestId;
+    session.stop = globalThis.__panoramaXhsStopRequest === requestId && !!requestId;
+    globalThis.__panoramaXhsStopRequest = null;
+    globalThis.__panoramaXhsSession = session;
+    const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden";
+    const blocked = () => {
+      if ([...document.querySelectorAll('#captcha, .captcha-container, .verify-container, .red-captcha, [class*="captcha-container"]')].some(visible)) return "verification";
+      if ([...document.querySelectorAll('.login-container, .login-modal, .login-mask')].some(el => visible(el) && /登录|扫码|login/i.test(el.textContent))) return "login";
+      if ([...document.querySelectorAll('.error-page, .error-wrapper, [role="alert"], .toast')].some(el => visible(el) && /访问频繁|操作频繁|访问受限|访问异常|稍后再试|安全验证/.test(el.textContent))) return "restricted";
+      return "";
+    };
     const selector = '.comment-item, .comment-item-sub, div[class*="commentItem"], .parent-comment';
     const first = (node, selectors) => selectors.map(s => node.querySelector(s)).find(el => el?.textContent.trim());
     const likes = value => {
@@ -160,7 +188,7 @@ async function panoramaCollectComments(expected) {
         if (!text) continue;
         const dedup = item.getAttribute("data-id") || item.id || `${author}|${text}`;
         const old = comments.get(dedup);
-        if (!old && comments.size >= 1000) break;
+        if (!old && comments.size >= limits.maxComments) break;
         comments.set(dedup, { id: old?.id || `xhs-${comments.size + 1}`, parentCommentId: null, author: author || old?.author || "", text,
           likeCount: likes(first(item, [".like .count", ".like-wrapper .count", 'span[class*="count"]'])?.textContent), publishedAt: "" });
       }
@@ -168,13 +196,21 @@ async function panoramaCollectComments(expected) {
     const targets = [".note-scroller", ".comments-container", ".comments-el"].map(s => root.querySelector(s) || document.querySelector(s)).filter(Boolean);
     const scroll = targets.find(el => el.scrollHeight > el.clientHeight + 20) || targets[0] || document.scrollingElement;
     const previousScroll = scroll.scrollTop;
-    let stable = 0, incomplete = true;
-    const clicked = new WeakSet();
+    if (resume) scroll.scrollTop = session.scrollTop;
+    let stable = 0, stopReason = "round_limit";
+    const clicked = session.clicked;
     try {
-      for (let round = 0; round < 20; round++) {
+      for (let round = 0; round < limits.maxRounds; round++) {
         if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
+        const interruption = blocked();
+        if (interruption) { stopReason = interruption; break; }
+        if (session.stop) { stopReason = "user"; break; }
+        if (comments.size >= limits.maxComments) { stopReason = "count_limit"; break; }
+        roundNumber = round + 1;
         const before = comments.size;
         read();
+        progress();
+        if (comments.size >= limits.maxComments) { stopReason = "count_limit"; break; }
         let expanded = 0;
         const repliesRoot = root.querySelector(".comments-container, .comments-el, .comments-list") || root;
         for (const el of repliesRoot.querySelectorAll('span, button, a, div[class*="expand"], div[class*="more"], div[class*="reply"]')) {
@@ -192,17 +228,38 @@ async function panoramaCollectComments(expected) {
         await sleep(850);
         if (!current()) return fail("页面已切换，请回到要分析的内容页面后重试。", "PAGE_CHANGED");
         read(); progress();
-        if (comments.size >= 1000) break;
+        if (session.stop) { stopReason = "user"; break; }
+        const afterLoad = blocked();
+        if (afterLoad) { stopReason = afterLoad; break; }
+        if (comments.size >= limits.maxComments) { stopReason = "count_limit"; break; }
         stable = comments.size === before && expanded === 0 ? stable + 1 : 0;
-        if (stable >= 3) { incomplete = false; break; }
+        if (stable >= limits.idleRounds) { stopReason = "idle"; break; }
       }
-    } finally { if (current()) scroll.scrollTop = previousScroll; }
-    if (!comments.size) return fail("没有读取到评论。请登录小红书，打开笔记详情并确认评论区已显示后重试。", "NO_COMMENTS");
-    return { success: true, comments: [...comments.values()], source: "小红书页面评论", truncated: incomplete,
-      notice: "仅包含页面已加载的评论，可能不是全部评论；没有区分评论与回复的对应关系。" };
+    } finally { session.scrollTop = scroll.scrollTop; if (current()) scroll.scrollTop = previousScroll; }
+    const reasons = {
+      idle: `连续 ${limits.idleRounds} 轮没有新增评论或展开回复，已停止获取。`,
+      count_limit: `已达到你设置的 ${limits.maxComments} 条上限。调高获取设置后，可继续获取。`,
+      round_limit: `已完成你设置的 ${limits.maxRounds} 轮滚动。可继续获取，或分析已有评论。`,
+      user: "已按你的操作停止获取。",
+      verification: "网页出现验证，已暂停获取。请在小红书网页完成验证后，再决定是否继续。",
+      login: "网页要求登录，已暂停获取。请先在小红书网页登录。",
+      restricted: "网页提示访问异常或操作频繁，已暂停获取。请按网页提示处理后再试。",
+    };
+    if (!comments.size && !["user", "verification", "login", "restricted"].includes(stopReason)) return fail("没有读取到评论。请登录小红书，打开笔记详情并确认评论区已显示后重试。", "NO_COMMENTS");
+    return { success: true, comments: [...comments.values()], source: "小红书页面评论", truncated: stopReason !== "idle",
+      stopReason, stopMessage: reasons[stopReason], rounds: roundNumber, limits,
+      notice: "按去重后的评论计数，包含已展开的回复；仅代表页面已读取内容，不代表全部评论。" };
   } catch {
     return fail("评论获取失败，请刷新内容页面后重试。");
   } finally { globalThis.__panoramaCollecting = false; }
+}
+
+function panoramaStopCollection(expected, requestId) {
+  if (location.pathname.split("/").filter(Boolean).at(-1) !== expected.id) return { success: false };
+  globalThis.__panoramaXhsStopRequest = requestId;
+  const session = globalThis.__panoramaXhsSession;
+  if (session?.key === expected.key && session.requestId === requestId) session.stop = true;
+  return { success: true };
 }
 
 function panoramaPageInfo() {
@@ -216,4 +273,4 @@ function panoramaSeek(seconds) {
   video.currentTime = Number.isFinite(video.duration) ? Math.min(seconds, video.duration) : seconds;
   return { success: true };
 }
-if (typeof module !== "undefined" && module.exports) module.exports = { panoramaReadVideo, panoramaCollectComments, panoramaPageInfo, panoramaSeek };
+if (typeof module !== "undefined" && module.exports) module.exports = { panoramaReadVideo, panoramaCollectComments, panoramaStopCollection, panoramaPageInfo, panoramaSeek };

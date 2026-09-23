@@ -13,7 +13,7 @@
 
 // Import safe defaults and validation helpers. Secret keys live in
 // chrome.storage.local and are never part of the extension source.
-importScripts("settings.js", "comments.js", "platforms.js", "collectors.js", "media-background.js");
+importScripts("settings.js", "comments.js", "xhs-analysis.js", "platforms.js", "collectors.js", "media-background.js");
 
 const DEBUG = false;
 const AI_PROVIDER_IDLE_TIMEOUT_MS = 50_000;
@@ -237,7 +237,7 @@ chrome.action.onClicked.addListener((tab) => {
   // Re-enable + open without awaiting — preserves user gesture context
   chrome.sidePanel.setOptions({
     tabId: tab.id,
-    path: "panel.html",
+    path: PANORAMA_PLATFORMS.panelPath(tab.url),
     enabled: true,
   });
   chrome.sidePanel.open({ tabId: tab.id });
@@ -256,7 +256,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 function updatePanelForTab(tabId, url) {
   const supported = !!PANORAMA_PLATFORMS.parse(url);
   chrome.sidePanel
-    .setOptions({ tabId, path: "panel.html", enabled: supported })
+    .setOptions({ tabId, path: PANORAMA_PLATFORMS.panelPath(url), enabled: supported })
     .catch(() => {});
 }
 
@@ -344,9 +344,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       message.timestamp,
       message.videoTitle,
       message.channelName,
+      sender.tab?.id,
     )
       .then(sendResponse)
       .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "saveSelectionNote") {
+    if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) {
+      sendResponse({ success: false, error: "UNAUTHORIZED" });
+      return false;
+    }
+    handleSaveSelectionNote(message).then(sendResponse)
+      .catch(() => sendResponse({ success: false, error: "笔记保存失败，请重试。" }));
     return true;
   }
 
@@ -401,7 +412,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Both calls start inside the original click gesture. Reply only once the
     // panel has actually opened so the launcher can show an actionable error.
     Promise.all([
-      chrome.sidePanel.setOptions({ tabId, path: "panel.html", enabled: true }),
+      chrome.sidePanel.setOptions({ tabId, path: PANORAMA_PLATFORMS.panelPath(sender.tab.url), enabled: true }),
       chrome.sidePanel.open({ tabId }),
     ]).then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: false }));
@@ -419,7 +430,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (tabId) {
       chrome.sidePanel.setOptions({
         tabId,
-        path: "panel.html",
+        path: PANORAMA_PLATFORMS.panelPath(sender.tab.url),
         enabled: true,
       });
       chrome.sidePanel
@@ -443,7 +454,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (tabs[0]) {
             chrome.sidePanel.setOptions({
               tabId: tabs[0].id,
-              path: "panel.html",
+              path: PANORAMA_PLATFORMS.panelPath(tabs[0].url),
               enabled: true,
             });
             chrome.sidePanel.open({ tabId: tabs[0].id }).catch((err) => {
@@ -467,10 +478,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         // Query specifically for YouTube tabs to avoid side panel context issues
         // Try multiple query strategies to find the right tab
-        let tabs = await chrome.tabs.query({
+        let tabs = Number.isInteger(message.tabId) ? [await chrome.tabs.get(message.tabId)] : await chrome.tabs.query({
           active: true,
           lastFocusedWindow: true,
         });
+        if (Number.isInteger(message.tabId) &&
+            (PANORAMA_PLATFORMS.parse(tabs[0]?.url)?.platform !== "youtube" ||
+             message.videoId && PANORAMA_PLATFORMS.parse(tabs[0]?.url)?.id !== message.videoId)) {
+          sendResponse({ success: false, error: "PAGE_CHANGED" });
+          return;
+        }
         debugLog(
           "[Video & Comment Analyzer BG] Active tab in last focused window:",
           tabs.length,
@@ -1309,6 +1326,7 @@ async function handleSaveNote(
   timestamp,
   videoTitle,
   channelName,
+  tabId,
 ) {
   try {
     const canonicalVideoUrl = YTD_SETTINGS.canonicalYouTubeUrl(videoId);
@@ -1331,7 +1349,9 @@ async function handleSaveNote(
 
     // If no cached transcript, fetch it
     if (!transcript) {
-      const transcriptResult = await handleFetchTranscript(videoId);
+      const transcriptResult = Number.isInteger(tabId)
+        ? await panoramaHandle({ action: "mediaCollect", mode: "video", tabId, key: `youtube:${videoId}` })
+        : await handleFetchTranscript(videoId);
       if (!transcriptResult.success) {
         return { success: false, error: "Could not fetch transcript" };
       }
@@ -1450,6 +1470,25 @@ async function handleSaveNote(
     console.error("[Video & Comment Analyzer] Save note error:", error);
     return { success: false, error: error.message };
   }
+}
+
+/** Store the exact selection without a paid cleanup or transcript request. */
+async function handleSaveSelectionNote(message) {
+  const videoUrl = YTD_SETTINGS.canonicalYouTubeUrl(message.videoId);
+  const text = typeof message.text === "string" ? message.text.trim() : "";
+  if (!text || text.length > 10000) return { success: false, error: "请选择 1–10,000 字的字幕后保存。" };
+  const timestamp = Math.max(0, Math.floor(Number(message.timestamp) || 0));
+  const note = {
+    id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    videoId: message.videoId,
+    videoTitle: String(message.videoTitle || "YouTube 视频").slice(0, 500),
+    channelName: String(message.channelName || "").slice(0, 300),
+    timestamp: PANORAMA_PLATFORMS.timestamp(timestamp), timestampSeconds: timestamp,
+    timestampedUrl: `${videoUrl}&t=${timestamp}s`, text, rawText: text, createdAt: Date.now(),
+  };
+  await saveNoteToStorage(note);
+  chrome.runtime.sendMessage({ action: "noteSaved", note }).catch(() => {});
+  return { success: true, note };
 }
 
 /**

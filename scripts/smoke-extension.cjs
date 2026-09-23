@@ -16,11 +16,12 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}/`;
-    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.4');
+    assert.equal((await worker.evaluate(() => chrome.runtime.getManifest())).version, '0.2.5');
     await worker.evaluate(() => {
       const originalFetch = fetch;
       globalThis.fixtureRequests = [];
       globalThis.fixtureDelay = 0;
+      globalThis.fixtureXhsFailAt = '';
       globalThis.fetch = async (input, options = {}) => {
         const url = new URL(typeof input === 'string' ? input : input.url || input.href);
         if (url.protocol === 'chrome-extension:') return originalFetch(input, options);
@@ -35,8 +36,35 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
         if (url.hostname === 'api.deepseek.com') {
           if (fixtureDelay) await new Promise(resolve => setTimeout(resolve, fixtureDelay));
           const body = JSON.parse(options.body);
+          let input; try { input = JSON.parse(body.messages.at(-1).content); } catch {}
+          if (input?.task === 'xhs_batch') {
+            if (fixtureXhsFailAt === input.comments[0].id) {
+              fixtureXhsFailAt = '';
+              return new Response(JSON.stringify({error:{message:'Fixture temporary failure'}}),{status:503,headers:{'Content-Type':'application/json'}});
+            }
+            const titles=['认可实际使用效果','认为价格偏高','询问使用方式','对适用人群存在分歧'];
+            const sentiments=['positive','negative','neutral','mixed'];
+            const topics=new Map();
+            const assignments=input.comments.map(row=>{
+              const group=Number(row.id.split('-').at(-1))%4, id=`t${group}`;
+              if(!topics.has(id))topics.set(id,{id,title:titles[group],sentiment:sentiments[group],summary:'评论围绕具体体验展开，保留不同意见并对照使用条件。',evidenceCommentIds:[row.id]});
+              return {commentId:row.id,topicId:id};
+            });
+            const tags=['具体经历','信息补充','建设性建议','关键问题'];
+            return response({choices:[{message:{content:JSON.stringify({summary:'大家主要关注使用效果和价格，部分用户认为值得购买，也有人提出不同体验。',topics:[...topics.values()],assignments,
+              featured:input.comments.slice(0,4).map((row,i)=>({commentId:row.id,tag:tags[i],reason:'提供了具体的使用背景，便于对照不同观点。'}))})}}]});
+          }
+          if (input?.task === 'xhs_merge') {
+            const grouped=new Map();
+            input.topics.forEach(topic=>{
+              if(!grouped.has(topic.title))grouped.set(topic.title,{title:topic.title,summary:topic.summary,sentiment:topic.sentiment,sourceTopicIds:[]});
+              grouped.get(topic.title).sourceTopicIds.push(topic.id);
+            });
+            return response({choices:[{message:{content:JSON.stringify({summary:'大家主要关注使用效果和价格，部分用户认为值得购买，也有人提出不同体验。',topics:[...grouped.values()]})}}]});
+          }
           const segmentIds = [...new Set([...body.messages.map(item=>item.content).join('\n').matchAll(/"id"\s*:\s*"(segment-[^"]+|ui-\d+)"/g)].map(match=>match[1]))];
           if (segmentIds.length) return response({choices:[{message:{content:JSON.stringify({segments:segmentIds.map(id=>({id,text:'翻译后的测试字幕。'}))})}}]});
+          if (body.messages.some(message=>message.content.includes('SELECTED:'))) return response({choices:[{message:{content:'这是根据选中字幕给出的简短解释。'}}]});
           const isComments = body.messages.some(message => message.content.includes('COMMENTS (JSON Lines)'));
           const analysis = isComments ? {summary:'评论分析完成',overallSentiment:'mixed',topics:[{title:'主要主题',sentiment:'positive',summary:'来自实际采集评论',evidenceCommentIds:['yt-1','xhs-1','sq1','invented-id']}],viewerQuestions:['用户问题'],creatorFeedback:['建议内容']}
             : {chapters:[{title:'第一章节',summary:'视频字幕分析完成',timestampSeconds:0},{title:'第二章节',summary:'内容细节',timestampSeconds:5}],keyQuotes:[{quote:'fixture quote',timestampSeconds:5}],keyMoments:[0,5]};
@@ -49,7 +77,9 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await context.route('https://**/*', async route => {
       const url = new URL(route.request().url());
       const json = data => route.fulfill({json:data,headers:{'Access-Control-Allow-Origin':'https://www.bilibili.com','Access-Control-Allow-Credentials':'true'}});
-      if (url.pathname === '/api/timedtext') return json({events:[{tStartMs:0,dDurationMs:5000,segs:[{utf8:'First transcript line'}]},{tStartMs:5000,dDurationMs:5000,segs:[{utf8:'Second transcript line'}]}]});
+      if (url.pathname === '/api/timedtext') return json({events:url.searchParams.get('v')==='aqz-KE-bpKQ'
+        ? Array.from({length:20},(_,i)=>({tStartMs:i*15000,dDurationMs:15000,segs:[{utf8:`Part ${i+1} explains useful thinking practices for taking better study notes and checking original evidence before drawing conclusions.`}]}))
+        : [{tStartMs:0,dDurationMs:5000,segs:[{utf8:'First transcript line'}]},{tStartMs:5000,dDurationMs:5000,segs:[{utf8:'Second transcript line'}]}]});
       if (url.hostname === 'api.bilibili.com') {
         if (url.pathname.endsWith('/view')) return json({code:0,data:{bvid:'BV13x41117TL',title:'B站测试视频',owner:{name:'UP主'},pages:[{page:1,cid:101,duration:10,part:'第一部分'},{page:2,cid:202,duration:10,part:'第二部分'}]}});
         assert.equal(url.searchParams.get('cid'),'202');
@@ -173,6 +203,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     console.log('PASS floating launcher opens the real Chrome side panel without API calls; SPA routes, dismiss, fullscreen and unsupported pages');
 
     const page = await context.newPage();
+    await page.bringToFront();
     await page.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     await page.locator('#vca-open').waitFor({state:'visible'});
     const tabId = await worker.evaluate(async()=> (await chrome.tabs.query({url:'https://www.youtube.com/watch*'}))[0].id);
@@ -184,13 +215,18 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     const panel = await context.newPage();
     const pageErrors = []; panel.on('pageerror',error=>pageErrors.push(error.message));
     await panel.goto(base+'panel.html');
-    await panel.waitForFunction(()=>!document.getElementById('analyze').disabled);
+    await panel.waitForURL(base+'sidepanel.html');
+    await panel.locator('#transcriptList .transcript-entry').first().waitFor();
+    assert.equal(await worker.evaluate(async id=>(await chrome.sidePanel.getOptions({tabId:id})).path,tabId),'sidepanel.html');
+    assert.deepEqual(await panel.locator('#tabsNav .tab').allTextContents(),['视频字幕','AI 摘要','评论分析','片段笔记']);
+    assert.match(await panel.locator('#transcriptSourceBadge').textContent(),/YouTube 网站字幕.*原文/);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.filter(item=>item.url.includes('supadata')).length),0);
     await worker.evaluate(async()=>{
       const saved=await chrome.storage.local.get('ytd_settings');
       await chrome.storage.local.set({ytd_settings:{...saved.ytd_settings,aiApiKey:''}});
     });
     await panel.bringToFront();
-    await panel.locator('#analyze').click();
+    await panel.locator('[data-tab=overview]').click();
     let activeUrl='';
     for (let attempt=0;attempt<30;attempt++) {
       activeUrl=await worker.evaluate(async()=> (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.url);
@@ -205,34 +241,41 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
       await chrome.storage.local.set({ytd_settings:{...saved.ytd_settings,aiApiKey:'fixture-updated-key'}});
     });
     await panel.bringToFront();
-    console.log('PASS missing DeepSeek key opens the settings page without a dialog or AI request');
-    await panel.locator('#analyze').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'));
-    assert.match(await panel.locator('#results').textContent(),/视频字幕分析完成/);
+    console.log('PASS YouTube default entry exposes all four tabs; missing DeepSeek opens settings without a dialog or AI request');
+    await panel.locator('[data-tab=overview]').click();
+    await panel.locator('#chapterList .chapter-title').first().waitFor();
+    assert.match(await panel.locator('#chapterList').textContent(),/视频字幕分析完成/);
     assert.equal(await worker.evaluate(()=>fixtureRequests.filter(item=>item.url.includes('deepseek')).at(-1).auth),'Bearer fixture-updated-key');
-    await panel.locator('.time').first().click();
-    console.log('PASS native YouTube transcript, DeepSeek analysis, persisted updated key and timestamp action');
+    await panel.locator('.chapter-item').first().click();
+    const [summaryDownload]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportOverviewBtn').click()]);
+    assert.match(fs.readFileSync(await summaryDownload.path(),'utf8'),/视频字幕分析完成/);
+    console.log('PASS native YouTube transcript, DeepSeek summary, persisted updated key, timestamp action and report export');
 
-    await panel.locator('[data-mode=comments]').click();
-    await panel.locator('#analyze').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('请在设置中填写该可选项'));
-    assert.equal(await panel.locator('#fixSettings').isVisible(),true);
+    await panel.locator('[data-tab=comments]').click();
+    await panel.locator('#commentFetchBtn').click();
+    await panel.waitForFunction(()=>document.getElementById('commentsStatus').textContent.includes('请在设置中填写该可选项'));
     await settings.locator('#youtubeKey').fill('fixture-google-key');
     await settings.locator('#preferencesForm button[type=submit]').click();
     await settings.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('设置已保存'));
-    await panel.locator('#analyze').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'));
-    assert.match(await panel.locator('#status').textContent(),/4 条评论/);
-    assert.equal(await panel.locator('#results img').count(),0);
-    assert.match(await panel.locator('#results').textContent(),/<img src=x/);
-    assert.equal(await panel.locator('#results').textContent().then(text=>text.includes('invented-id')),false);
+    await panel.locator('#commentFetchBtn').click();
+    await panel.waitForFunction(()=>document.getElementById('commentsStatus').textContent.startsWith('已获取'));
+    await panel.locator('#commentAnalyzeBtn').click();
+    await panel.waitForFunction(()=>document.getElementById('commentsStatus').textContent.startsWith('评论分析完成'));
+    assert.equal(await panel.locator('#commentStats .comment-stat-value').first().textContent(),'4');
+    assert.equal(await panel.locator('#commentAnalysis img').count(),0);
+    assert.match(await panel.locator('#commentAnalysis').textContent(),/<img src=x/);
+    assert.equal(await panel.locator('#commentAnalysis').textContent().then(text=>text.includes('invented-id')),false);
     const calls=await worker.evaluate(()=>fixtureRequests.filter(item=>item.url.includes('googleapis')).map(item=>item.url));
     assert.equal(calls.length,3); assert.ok(calls.some(url=>url.includes('pageToken=fixture-page-2')));
-    console.log('PASS optional Google key, official comment API pagination/replies, source evidence and HTML escaping');
+    const [commentsDownload]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportCommentsBtn').click()]);
+    assert.equal(JSON.parse(fs.readFileSync(await commentsDownload.path(),'utf8')).comments.length,4);
+    console.log('PASS optional Google key, official comment API pagination/replies, source evidence, HTML escaping and comment export');
 
+    await page.bringToFront();
     await page.goto('https://www.bilibili.com/video/BV13x41117TL/?p=2');
     await page.locator('#vca-open').waitFor({state:'visible'});
     assert.match(await page.locator('#vca-tip').textContent(),/哔哩哔哩.*字幕/);
+    await panel.waitForURL(base+'panel.html');
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='哔哩哔哩');
     assert.equal(await panel.locator('#results').isVisible(),false);
     assert.equal(await panel.locator('[data-mode=comments]').isDisabled(),true);
@@ -242,6 +285,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     assert.match(await panel.locator('#rawContent').textContent(),/第二部分第一句/);
     console.log('PASS Bilibili current-part subtitles and video analysis in the same panel');
 
+    await page.bringToFront();
     await page.goto('https://www.xiaohongshu.com/explore/1234567890abcdef12345678');
     await page.locator('#vca-open').waitFor({state:'visible'});
     assert.match(await page.locator('#vca-tip').textContent(),/小红书.*评论/);
@@ -250,12 +294,110 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'),null,{timeout:30000});
     assert.match(await panel.locator('#status').textContent(),/3 条评论/);
     assert.equal(await panel.locator('#title').textContent(),'小红书测试笔记');
-    assert.match(await panel.locator('#results').textContent(),/12000 赞/);
+    assert.match(await panel.locator('#results').textContent(),/12,000 赞/);
     assert.equal(await panel.locator('#results img').count(),0);
     const [download]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportData').click()]);
     const exported=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
     assert.equal(exported.comments.length,3); assert.ok(!JSON.stringify(exported).includes('fixture-updated-key'));
     console.log('PASS reused XHS DOM selectors, expansion, wrapper/duplicate filtering, like counts and key-free export');
+
+    await settings.locator('#xiaohongshuSettings summary').click();
+    await settings.locator('#xhsMaxComments').fill('5001');
+    await settings.locator('#xhsSettingsForm button[type=submit]').click();
+    assert.equal(await settings.locator('#xhsMaxComments').evaluate(input=>input.validity.rangeOverflow),true);
+    await settings.locator('#xhsMaxComments').fill('100');
+    await settings.locator('#xhsMaxRounds').fill('5');
+    await settings.locator('#xhsIdleRounds').fill('2');
+    await settings.locator('#xhsSettingsForm button[type=submit]').click();
+    await settings.waitForFunction(()=>document.getElementById('xhsSaveStatus').textContent.includes('已保存'));
+    await settings.reload(); await settings.locator('#xiaohongshuSettings summary').click();
+    assert.equal(await settings.locator('#xhsMaxComments').inputValue(),'100');
+    assert.equal((await worker.evaluate(()=>chrome.storage.local.get('ytd_settings'))).ytd_settings.aiApiKey,'fixture-updated-key');
+    const fillXhs=async count=>page.evaluate(count=>{
+      const container=document.querySelector('.comments-container');container.replaceChildren();
+      for(let i=1;i<=count;i++){
+        const item=document.createElement('div');item.className='comment-item';item.dataset.id=String(i);
+        const author=document.createElement('div');author.className='author';const name=document.createElement('span');name.className='name';name.textContent=`体验用户 ${i}`;author.append(name);
+        const content=document.createElement('div');content.className='content';content.textContent=`第 ${i} 条：用了两周后，我更关注实际效果和日常使用成本，希望补充不同场景下的体验。`;
+        item.append(author,content);container.append(item);
+      }
+    },count);
+    await fillXhs(431);
+    const requestsBeforeCollect=await worker.evaluate(()=>fixtureRequests.length);
+    await panel.locator('#collect').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('100 条上限'));
+    assert.match(await panel.locator('#xhsProgressText').textContent(),/100 条/);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),requestsBeforeCollect);
+    await panel.evaluate(async()=>{
+      const query=chrome.tabs.query;
+      chrome.tabs.query=async()=>[{id:999,url:chrome.runtime.getURL('preferences.html')+'#xiaohongshuSettings'}];
+      await refreshContext(); chrome.tabs.query=query;
+      if(state.data?.comments.length!==100)throw new Error('Opening collection settings must preserve collected comments');
+      await refreshContext();
+    });
+    await panel.locator('#continueCollect').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('调高上限'));
+    await settings.locator('#xhsMaxComments').fill('600');
+    await settings.locator('#xhsSettingsForm button[type=submit]').click();
+    await settings.waitForFunction(()=>document.getElementById('xhsSaveStatus').textContent.includes('已保存'));
+    await panel.locator('#continueCollect').click();
+    await panel.waitForFunction(()=>document.getElementById('analyze').textContent.includes('431')&&!document.getElementById('analyze').disabled);
+    assert.match(await panel.locator('#xhsProgressText').textContent(),/431 条/);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),requestsBeforeCollect);
+    await panel.evaluate(()=>{
+      window.fixtureProgress=[];
+      chrome.runtime.onMessage.addListener(message=>{if(message.action==='mediaProgress')fixtureProgress.push(message);});
+    });
+    await worker.evaluate(()=>{fixtureXhsFailAt='xhs-121';fixtureDelay=350;});
+    await panel.locator('#analyze').click();
+    await panel.waitForFunction(()=>document.getElementById('xhsProgressText').textContent.includes('60 / 431'));
+    await panel.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-xhs-progress.png'),fullPage:true,animations:'disabled'});
+    await panel.waitForFunction(()=>document.getElementById('analyze').textContent==='重试分析'&&!document.getElementById('analyze').disabled);
+    assert.match(await panel.locator('#xhsProgressText').textContent(),/120 \/ 431/);
+    await panel.locator('#analyze').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'),null,{timeout:30000});
+    await worker.evaluate(()=>{fixtureDelay=0;});
+    assert.deepEqual(await panel.locator('.xhs-metrics dd').allTextContents(),['431','431','4','8']);
+    const analyzed=await panel.evaluate(()=>fixtureProgress.filter(p=>p.phase==='analyze').map(p=>p.analyzed));
+    assert.ok(analyzed.includes(60)&&analyzed.includes(120)&&analyzed.includes(431));
+    const batchStarts=await worker.evaluate(offset=>fixtureRequests.slice(offset).map(r=>{try{return JSON.parse(JSON.parse(r.body).messages.at(-1).content);}catch{return {};}}).filter(r=>r.task==='xhs_batch').map(r=>r.comments[0].id),requestsBeforeCollect);
+    assert.equal(batchStarts.filter(id=>id==='xhs-1').length,1,'retry must reuse a successful batch');
+    assert.equal(batchStarts.filter(id=>id==='xhs-121').length,2,'retry repeats only failed/unprocessed work');
+    assert.equal(await panel.locator('#xhsTopics .xhs-topic').count(),4);
+    assert.equal(await panel.locator('#xhsFeatured .xhs-featured').count(),8);
+    for (const width of [320,375,414,768]) {
+      await panel.setViewportSize({width,height:900});
+      assert.ok(await panel.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`XHS result overflow at ${width}`);
+    }
+    await panel.setViewportSize({width:414,height:900});
+    const [reportDownload]=await Promise.all([panel.waitForEvent('download'),panel.locator('#exportReport').click()]);
+    const report=fs.readFileSync(await reportDownload.path(),'utf8');
+    assert.match(report,/实际分析 431 条/);assert.match(report,/入选理由/);assert.match(report,/议题态度/);
+    await panel.evaluate(()=>window.scrollTo(0,0));
+    await panel.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-xhs-results.png'),fullPage:true,animations:'disabled'});
+    await panel.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-xhs-overview.png'),animations:'disabled'});
+    await settings.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-xhs-settings.png'),fullPage:true,animations:'disabled'});
+    console.log('PASS adjustable XHS limits, pause/continue with deduplication, 431-comment full analysis, progress, resume after failure, topic counts, featured comments and report export');
+
+    await fillXhs(12); await panel.reload();
+    await panel.waitForFunction(()=>!document.getElementById('analyze').disabled);
+    await panel.locator('#analyze').click();
+    await panel.waitForFunction(()=>document.getElementById('xhsProgressText').textContent.includes('12 条'));
+    await panel.locator('#stopCollect').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.startsWith('分析完成'));
+    assert.match(await panel.locator('#status').textContent(),/按你的操作停止/);
+    assert.deepEqual((await panel.locator('.xhs-metrics dd').allTextContents()).slice(0,2),['12','12']);
+    await page.evaluate(()=>{const captcha=document.createElement('div');captcha.id='captcha';captcha.textContent='请完成验证';document.body.append(captcha);});
+    const beforeBlocked=await worker.evaluate(()=>fixtureRequests.length);
+    await panel.locator('#collect').click();
+    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('出现验证'));
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),beforeBlocked);
+    assert.match(await panel.locator('#xhsProgressText').textContent(),/0 条/);
+    await page.evaluate(()=>document.getElementById('captcha').remove());
+    await panel.locator('#continueCollect').click();
+    await panel.waitForFunction(()=>document.getElementById('analyze').textContent.includes('12')&&!document.getElementById('analyze').disabled);
+    assert.match(await panel.locator('#status').textContent(),/连续 2 轮/);
+    console.log('PASS stop-and-analyze partial comments, visible verification pause and configured idle threshold');
 
     for (const width of [320,375,414,768]) {
       await panel.setViewportSize({width,height:900});
@@ -266,6 +408,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await panel.screenshot({path:path.join(os.tmpdir(),'panorama-panel-smoke.png'),fullPage:true,animations:'disabled'});
     console.log('PASS panel layout at 320, 375, 414 and 768 pixels');
 
+    await page.bringToFront();
     await page.goto('https://xueqiu.com/123/456');
     await page.locator('#vca-open').waitFor({state:'visible'});
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='雪球');
@@ -274,12 +417,17 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     assert.match(await panel.locator('#rawContent').textContent(),/雪球评论/);
     console.log('PASS retained Xueqiu comments');
 
+    await worker.evaluate(()=>chrome.storage.local.remove('digest_dQw4w9WgXcQ'));
+    await page.bringToFront();
     await page.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
-    await panel.waitForFunction(()=>document.getElementById('platform').textContent==='YouTube');
+    await panel.waitForURL(base+'sidepanel.html');
+    await panel.locator('#transcriptList .transcript-entry').first().waitFor();
     await worker.evaluate(()=>{fixtureDelay=1500;});
-    await panel.locator('#analyze').click();
-    await panel.waitForFunction(()=>document.getElementById('status').textContent.includes('DeepSeek 正在分析'));
+    await panel.locator('[data-tab=overview]').click();
+    await panel.waitForFunction(()=>document.getElementById('chapterList').textContent.includes('DeepSeek 正在生成'));
+    await page.bringToFront();
     await page.goto('https://www.bilibili.com/video/BV13x41117TL/?p=1');
+    await panel.waitForURL(base+'panel.html');
     await panel.waitForFunction(()=>document.getElementById('platform').textContent==='哔哩哔哩');
     await panel.waitForTimeout(1800);
     assert.equal(await panel.locator('#results').isVisible(),false);
@@ -295,15 +443,43 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
         timestampedUrl:'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=5s'
       }]});
     });
+    await page.bringToFront();
     await page.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     // This UI is hosted in a tab for inspection. A native side panel does not
     // become an active chrome-extension: tab when a tester clicks its controls.
-    await context.addInitScript(()=>{if(location.pathname==='/sidepanel.html') window.close=()=>{};});
-    const learning = await context.newPage();
+    const learning = panel;
     learning.on('pageerror',error=>pageErrors.push(error.message));
-    await learning.goto(base+'sidepanel.html');
+    await learning.waitForURL(base+'sidepanel.html');
     await learning.locator('#transcriptList .transcript-entry').first().waitFor();
     await learning.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-subtitle-study.png'),fullPage:true,animations:'disabled'});
+    await learning.locator('#transcriptSearch').fill('TRANSCRIPT LINE');
+    await learning.waitForFunction(()=>document.getElementById('transcriptSearchCount').textContent==='1 / 2');
+    await learning.locator('#transcriptSearchNext').click();
+    assert.equal(await learning.locator('#transcriptSearchCount').textContent(),'2 / 2');
+    await learning.locator('#transcriptSearch').press('Shift+Enter');
+    assert.equal(await learning.locator('#transcriptSearchCount').textContent(),'1 / 2');
+    await learning.locator('#transcriptSearch').fill('[');
+    assert.equal(await learning.locator('#transcriptSearchCount').textContent(),'未找到');
+    await learning.locator('#transcriptSearch').press('Escape');
+    assert.equal(await learning.locator('mark.transcript-match').count(),0);
+    const selectTranscript = async()=>learning.evaluate(()=>{
+      const field=document.querySelector('#transcriptList .transcript-text');
+      const range=document.createRange();range.setStart(field.firstChild,0);range.setEnd(field.firstChild,5);
+      const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
+      field.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    });
+    const beforeSelectedNote=await worker.evaluate(()=>fixtureRequests.length);
+    await selectTranscript();
+    await learning.locator('.selection-note-btn').click();
+    await learning.waitForFunction(()=>document.querySelector('.selection-note-btn').textContent==='已保存');
+    const selectedNote=await worker.evaluate(async()=> (await chrome.storage.local.get('ytd_notes')).ytd_notes.find(note=>note.rawText==='First'));
+    assert.equal(selectedNote.text,'First');assert.equal(selectedNote.timestampSeconds,0);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),beforeSelectedNote,'Saving a selection must not call AI or Supadata');
+    await selectTranscript();
+    await learning.locator('.explain-btn').click();
+    await learning.waitForFunction(()=>document.getElementById('explanationContent')?.textContent.includes('简短解释'));
+    await learning.locator('#closeExplain').click();
+    console.log('PASS transcript search, match navigation, literal queries, selection explanation and exact timestamped notes without AI costs');
     await learning.locator('[data-tab=overview]').click();
     await learning.locator('#chapterList .chapter-title').first().waitFor();
     await learning.locator('[data-tab=comments]').click();
@@ -318,6 +494,12 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     await learning.locator('[data-tab=transcript]').click();
     await learning.locator('[data-language-mode=bilingual]').click();
     await learning.waitForFunction(()=>document.querySelector('#transcriptList .transcript-translation')?.textContent==='翻译后的测试字幕。');
+    assert.match(await learning.locator('#transcriptList .transcript-original').first().textContent(),/First transcript/);
+    await learning.screenshot({path:path.join(os.tmpdir(),'video-comment-analyzer-youtube-bilingual.png'),fullPage:true,animations:'disabled'});
+    await learning.locator('[data-language-mode=zh]').click();
+    await learning.waitForFunction(()=>document.querySelector('#transcriptList .transcript-translation')?.textContent==='翻译后的测试字幕。');
+    assert.equal(await learning.locator('#transcriptList .transcript-original').count(),0);
+    await learning.locator('[data-language-mode=bilingual]').click();
     for (const width of [320,414,768]) {
       await learning.setViewportSize({width,height:900});
       assert.ok(await learning.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`learning layout overflow at ${width}`);
@@ -334,6 +516,50 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'panorama-smoke-'));
     assert.doesNotMatch(await learning.locator('#commentsStatus').textContent(),/NO_AI_KEY/);
     assert.deepEqual(pageErrors,[]);
     console.log('PASS subtitle study, summary, comments, clip notes and bilingual translation; responsive Chinese copy and actionable missing-key message');
+
+    await worker.evaluate(async()=>{
+      const saved=await chrome.storage.local.get('ytd_settings');
+      await chrome.storage.local.set({ytd_settings:{...saved.ytd_settings,aiApiKey:'fixture-updated-key'}});
+    });
+    await learning.bringToFront();
+    await learning.locator('[data-tab=transcript]').click();
+    await learning.locator('[data-language-mode=bilingual]').click();
+    await learning.waitForFunction(()=>!document.getElementById('langSpinner').classList.contains('visible'));
+    const beforeNewVideo=await worker.evaluate(()=>fixtureRequests.length);
+    await page.bringToFront();
+    await page.goto('https://www.youtube.com/watch?v=M7lc1UVf-VE');
+    await learning.waitForFunction(()=>currentVideoId==='M7lc1UVf-VE'&&currentTranscript?.length);
+    assert.equal(await learning.locator('[data-language-mode=original]').getAttribute('aria-pressed'),'true');
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),beforeNewVideo,'New videos must start in original without auto translation or Supadata');
+    await page.evaluate(()=>{delete window.ytInitialPlayerResponse.captions;});
+    await worker.evaluate(()=>chrome.storage.local.remove('digest_M7lc1UVf-VE'));
+    await learning.reload();
+    await learning.waitForFunction(()=>document.getElementById('transcriptNoticeText').textContent.includes('未能读取'));
+    assert.equal(await learning.locator('#tabsNav .tab:visible').count(),4,'No subtitles must not hide comments and notes');
+    assert.equal(await worker.evaluate(()=>fixtureRequests.length),beforeNewVideo);
+    await learning.locator('#transcriptFetchBtn').click();
+    await learning.waitForFunction(()=>document.getElementById('transcriptSourceBadge')?.textContent.includes('Supadata'));
+    assert.match(await learning.locator('#transcriptList').textContent(),/Fallback native subtitle/);
+    assert.equal(await worker.evaluate(()=>fixtureRequests.filter(item=>item.url.includes('supadata')).length),1);
+    console.log('PASS new-video original default, no-subtitle independent tabs and explicit optional Supadata fallback');
+    await page.bringToFront();
+    await page.goto('https://www.youtube.com/watch?v=aqz-KE-bpKQ');
+    await learning.waitForFunction(()=>currentVideoId==='aqz-KE-bpKQ'&&currentTranscript?.length===20);
+    await learning.locator('#transcriptSearch').fill('Part 15');
+    await learning.locator('#transcriptSearch').press('Escape');
+    const readingScroll=await learning.locator('#contentArea').evaluate(el=>el.scrollTop);
+    assert.ok(readingScroll>500);
+    const readingAnchor=await learning.evaluate(()=>captureTranscriptPosition());
+    await learning.locator('[data-tab=notes]').click();
+    await learning.locator('[data-tab=transcript]').click();
+    assert.ok(Math.abs(await learning.locator('#contentArea').evaluate(el=>el.scrollTop)-readingScroll)<3);
+    await learning.locator('[data-language-mode=bilingual]').click();
+    await learning.waitForFunction(()=>!document.getElementById('langSpinner').classList.contains('visible'));
+    const translatedAnchor=await learning.evaluate(()=>captureTranscriptPosition());
+    assert.equal(translatedAnchor.seconds,readingAnchor.seconds);
+    assert.ok(Math.abs(translatedAnchor.offset-readingAnchor.offset)<3);
+    assert.deepEqual(pageErrors,[]);
+    console.log('PASS long-transcript reading position survives tab changes and progressive bilingual translation');
     console.log('All browser smoke tests passed. APIs mocked; no real keys or paid requests used.');
   } finally { await context.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -8,14 +8,23 @@
     <section class="source" aria-label="当前页面"><span id="platform" class="badge">当前页面</span><h1 id="title">正在读取页面…</h1><p id="author" class="muted"></p></section>
     <nav class="modes" aria-label="选择分析内容"><button data-mode="video" aria-pressed="true">视频摘要</button><button data-mode="comments" aria-pressed="false">评论分析</button></nav>
     <p id="hint" class="muted">先打开视频、笔记或帖子详情页，再选择要分析的内容。</p>
-    <div class="actions"><button id="analyze" class="primary" disabled>开始分析</button><button id="collect" disabled>只获取内容</button></div>
-    <p class="muted fine">「开始分析」会获取内容并发送给 DeepSeek，按你的账户计费。「只获取内容」不调用 AI，但可能消耗 YouTube 或 Supadata 的额度。</p>
+    <div class="actions"><button id="analyze" class="primary" disabled>开始分析</button><button id="collect" disabled>只获取内容</button><button id="continueCollect" hidden>继续获取</button></div>
+    <a id="xhsSettingsLink" class="fine" href="preferences.html#xiaohongshuSettings" target="_blank" rel="noopener noreferrer" hidden>调整小红书获取范围</a>
+    <p id="usageNotice" class="muted fine">「开始分析」会获取内容并发送给 DeepSeek，按你的账户计费。「只获取内容」不调用 AI，但可能消耗 YouTube 或 Supadata 的额度。</p>
     <div id="status" role="status" aria-live="polite"></div>
+    <section id="xhsProgress" class="xhs-progress" aria-label="评论分析进度" hidden>
+      <ol id="xhsSteps" class="xhs-steps"><li>1 获取评论</li><li>2 分析评论</li><li>3 完成</li></ol>
+      <h2 id="xhsProgressTitle">正在获取评论</h2>
+      <p id="xhsProgressText" class="xhs-progress-count" role="status" aria-live="polite"></p>
+      <progress id="xhsProgressBar" aria-labelledby="xhsProgressTitle" aria-describedby="xhsProgressText"></progress>
+      <p id="xhsProgressDetail" class="muted fine"></p>
+      <button id="stopCollect" hidden>停止获取，分析已有评论</button>
+    </section>
     <button id="fixSettings" class="text-button" hidden>打开设置检查密钥</button>
     <section id="results" aria-label="分析结果" hidden></section>
     <div class="actions export-actions"><button id="exportReport" hidden>导出分析报告</button><button id="exportData" hidden>导出已获取内容</button></div>
     <details id="raw" hidden><summary>查看已获取内容 <span id="rawCount"></span></summary><p class="muted fine">切换页面会清除当前结果。需要保留时，请先导出。</p><div id="rawContent"></div></details>
-    <footer><a id="legacy" href="sidepanel.html" hidden title="翻译字幕、查看 AI 摘要和保存笔记；此工具使用 Supadata 获取字幕，会消耗其额度。">YouTube 字幕学习（需 Supadata Key）</a><p class="muted fine">视频摘要只分析字幕，不识别画面。评论结论仅代表本次获取的内容。</p></footer>
+    <footer><p id="resultScope" class="muted fine">视频摘要只分析字幕，不识别画面。评论结论仅代表本次获取的内容。</p></footer>
   </main>
-  <script src="settings.js"></script><script src="platforms.js"></script><script src="setup.js"></script><script src="ui-copy.js"></script><script src="panel.js"></script>
+  <script src="settings.js"></script><script src="platforms.js"></script><script src="setup.js"></script><script src="ui-copy.js"></script><script src="xhs-panel.js"></script><script src="panel.js"></script>
 </body></html>

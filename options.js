@@ -14,7 +14,7 @@ const YTD_OPTIONS = (() => {
       youtubeEnableLink: "1. Enable YouTube Data API v3",
       transcriptProvider: "YouTube subtitles",
       supadataApiKeyLabel: "Supadata API Key (optional)",
-      supadataHelp: "Used by YouTube subtitle study and as a backup when the main panel cannot read YouTube subtitles. ",
+      supadataHelp: "Optional fallback when YouTube page subtitles cannot be read. Translation and bilingual reading do not require this key. ",
       supadataLink: "Get a Supadata API Key",
       supadataHelpSuffix:
         ". Copy the key from your Supadata account and paste it above.",
@@ -96,7 +96,7 @@ const YTD_OPTIONS = (() => {
       youtubeEnableLink: "1. 启用 YouTube Data API v3",
       transcriptProvider: "YouTube 字幕",
       supadataApiKeyLabel: "Supadata API Key（可选）",
-      supadataHelp: "用于「YouTube 字幕学习」获取字幕，也作为分析面板读取 YouTube 字幕失败时的备用服务。",
+      supadataHelp: "读取 YouTube 网页字幕失败时的备用服务；翻译和中英对照不强制要求此密钥。",
       supadataLink: "申请 Supadata API Key",
       supadataHelpSuffix: "，复制后粘贴到上方输入框。",
       supadataQuota: "免费方案：每月 100 积分，无需信用卡。获取一次已有字幕消耗 1 积分，约可请求 100 次；未找到字幕也可能扣除积分。未用完的积分不累计到下月。插件不会把无字幕视频转写成文字。",

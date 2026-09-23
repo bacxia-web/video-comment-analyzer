@@ -119,6 +119,66 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+.panel-hint, .reading-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 8px 0 12px;
+}
+
+.transcript-notice {
+  border: 1px solid var(--border-heavy);
+  border-radius: var(--r-md);
+  padding: 16px;
+  color: var(--text-secondary);
+}
+.transcript-notice p { margin-bottom: 12px; }
+.transcript-notice a { color: var(--accent-hover); margin-left: 8px; font-size: 12px; }
+.transcript-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  position: sticky;
+  top: -1px;
+  z-index: 2;
+  background: var(--bg);
+  padding: 7px 0;
+}
+.transcript-search input {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  border: 1px solid var(--border-heavy);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+.transcript-search button {
+  border: 1px solid var(--border-heavy);
+  border-radius: var(--r-sm);
+  width: 30px;
+  height: 34px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.transcript-search button:disabled { opacity: .4; cursor: default; }
+.transcript-search input:focus-visible, .transcript-search button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#transcriptSearchCount { font-size: 12px; white-space: nowrap; color: var(--text-secondary); }
+.transcript-match { background: #ffe4a3; color: inherit; border-radius: 2px; }
+.transcript-match.current-match { background: #ffc46e; outline: 1px solid #a75c15; }
+.selection-note-btn {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border: 0;
+  border-left: 1px solid currentColor;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
 .header-top {
   display: flex;
   align-items: flex-start;
@@ -223,7 +283,6 @@ body {
 
 .tab-panel.active {
   display: block;
-  animation: fadeIn 0.25s ease;
 }
 
 @keyframes fadeIn {
@@ -1231,7 +1290,15 @@ body {
   z-index: 1000;
   transform: translateX(-50%);
   animation: fadeIn 0.15s ease;
+  white-space: nowrap;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-heavy);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-md);
 }
+
+.comment-export-actions { margin-top: 12px; justify-content: flex-start; }
 
 .explain-btn {
   font-family: var(--font-body);

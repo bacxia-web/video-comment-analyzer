@@ -20,7 +20,7 @@ test("manifest uses minimized install-time permissions", () => {
     manifest.host_permissions.includes("https://www.googleapis.com/*"),
   );
   assert.equal(Object.hasOwn(manifest, "optional_host_permissions"), false);
-  assert.equal(manifest.version, "0.2.4");
+  assert.equal(manifest.version, "0.2.5");
 });
 
 test("unified release includes setup, platform scope, install instructions and privacy", () => {
@@ -36,7 +36,7 @@ test("unified release includes setup, platform scope, install instructions and p
   assert.match(read("preferences.html"), /platform\.deepseek\.com\/api_keys/);
   assert.match(read("PRIVACY.md"), /TRUSTED_CONTEXTS/);
   assert.match(read("SECURITY.md"), /textContent/);
-  const runtime = ["panel.js", "media-background.js", "collectors.js"].map(read).join("\n");
+  const runtime = ["panel.js", "xhs-panel.js", "xhs-analysis.js", "media-background.js", "collectors.js"].map(read).join("\n");
   assert.doesNotMatch(runtime, /\.innerHTML\s*=/);
 });
 
@@ -100,6 +100,7 @@ test("published prompt files contain runtime sections", () => {
   const expectedSections = {
     "prompts/analysis.md": ["System prompt", "User prompt"],
     "prompts/comments.md": ["System prompt", "User prompt"],
+    "prompts/xhs-comments.md": ["Batch prompt", "Merge prompt"],
     "prompts/explain.md": ["System prompt", "User prompt"],
     "prompts/note-cleanup.md": ["System prompt", "User prompt"],
     "prompts/translation.md": [

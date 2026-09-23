@@ -51,6 +51,9 @@ var PANORAMA_PLATFORMS = (() => {
     return { success: true, transcript, transcriptText: transcript.map(row => row.text).join("\n"),
       transcriptTextTimestamped, source };
   }
-  return { parse, timestamp, transcriptResult };
+  function panelPath(url) {
+    return parse(url)?.platform === "youtube" ? "sidepanel.html" : "panel.html";
+  }
+  return { parse, timestamp, transcriptResult, panelPath };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = PANORAMA_PLATFORMS;

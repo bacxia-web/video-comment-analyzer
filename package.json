@@ -1,8 +1,8 @@
 {
   "name": "video-comment-analyzer",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
-  "description": "在一个侧边栏中分析 YouTube、哔哩哔哩视频字幕，以及 YouTube、小红书和雪球评论。",
+  "description": "YouTube 字幕翻译、中英对照和笔记；YouTube、哔哩哔哩视频摘要；YouTube、小红书、雪球评论分析。",
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.js",

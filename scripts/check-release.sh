@@ -30,6 +30,8 @@ public_allowlist=(
   "settings.js"
   "ui-copy.js"
   "comments.js"
+  "xhs-analysis.js"
+  "xhs-panel.js"
   "platforms.js"
   "collectors.js"
   "media-background.js"
@@ -52,6 +54,7 @@ public_allowlist=(
   "icons/icon128.png"
   "prompts/analysis.md"
   "prompts/comments.md"
+  "prompts/xhs-comments.md"
   "prompts/explain.md"
   "prompts/note-cleanup.md"
   "prompts/translation.md"
@@ -202,7 +205,8 @@ for (const file of releaseFiles) {
       ) {
         continue;
       }
-      referenced.add(path.posix.join(path.posix.dirname(file), value));
+      const localPath = value.split(/[?#]/, 1)[0];
+      if (localPath) referenced.add(path.posix.join(path.posix.dirname(file), localPath));
     }
   }
 }

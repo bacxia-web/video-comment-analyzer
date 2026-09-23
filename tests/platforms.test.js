@@ -22,6 +22,13 @@ test('transcripts reject empty, invalid, and overlong sources rather than silent
   assert.equal(platforms.transcriptResult(Array.from({length:30}, (_,i) => ({start:i,text:'a'.repeat(10000)})), 'native').error, 'TRANSCRIPT_TOO_LONG');
 });
 
+test('YouTube uses the full panel while other platforms keep their supported analysis UI',()=>{
+  assert.equal(platforms.panelPath('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),'sidepanel.html');
+  assert.equal(platforms.panelPath('https://www.youtube.com/shorts/dQw4w9WgXcQ'),'sidepanel.html');
+  assert.equal(platforms.panelPath('https://www.xiaohongshu.com/explore/1234567890abcdef12345678'),'panel.html');
+  assert.equal(platforms.panelPath('https://www.bilibili.com/video/BV13x41117TL/?p=2'),'panel.html');
+});
+
 function runCollector(url, expected, fetchImpl, player) {
   const context = { URL, URLSearchParams, AbortSignal, location: new URL(url), fetch: fetchImpl,
     window: { ytInitialPlayerResponse: player },

@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
-    <a href="panel.html" style="padding: 8px 20px; color: var(--accent)">← 返回分析面板</a>
     <!-- HEADER -->
     <!-- Note: the panel's own "Video &amp; Comment Analyzer" title is shown by Chrome's side-panel
          title bar, so we don't repeat a logo here. -->
@@ -64,7 +63,7 @@
         </div>
       </div>
 
-      <p class="comments-status">字幕学习通过 Supadata 获取字幕。AI 摘要、翻译、解释和笔记润色使用 DeepSeek，按对应服务账户计费。</p>
+      <p class="panel-hint">YouTube · 读字幕、看摘要、分析评论、保存笔记</p>
       <!-- Tab navigation -->
       <div class="tabs" id="tabsNav" style="display: none">
         <button class="tab active" data-tab="transcript">视频字幕</button>
@@ -91,7 +90,7 @@
           <div class="loading-bar"></div>
           <div class="loading-text" id="loadingText">正在获取字幕…</div>
           <div class="loading-subtext" id="loadingSubtext">
-            正在通过 Supadata 读取这个视频已有的字幕。
+            正在读取这个视频已有的字幕。
           </div>
         </div>
       </div>
@@ -118,12 +117,24 @@
                 <div class="section-title">视频字幕</div>
               </div>
               <div class="transcript-actions">
-                <button class="enhance-btn" id="copyTranscriptBtn" title="复制字幕原文，不包含译文">复制原文</button>
-                <button class="enhance-btn" id="exportTranscriptBtn" title="下载字幕原文，不包含译文">
+                <button class="enhance-btn" id="copyTranscriptBtn" disabled title="复制字幕原文，不包含译文">复制原文</button>
+                <button class="enhance-btn" id="exportTranscriptBtn" disabled title="下载字幕原文，不包含译文">
                   导出原文
                 </button>
               </div>
             </div>
+            <div id="transcriptNotice" class="transcript-notice" role="status">
+              <p id="transcriptNoticeText">正在读取页面字幕…</p>
+              <button class="enhance-btn" id="transcriptFetchBtn" type="button" disabled>正在读取…</button>
+              <a href="preferences.html#optionalServices" target="_blank" rel="noopener">字幕服务设置</a>
+            </div>
+            <div class="transcript-search" id="transcriptSearchBar" hidden role="search" aria-label="搜索字幕">
+              <input id="transcriptSearch" type="search" placeholder="搜索当前字幕" aria-label="搜索当前字幕" title="在当前显示的原文或译文中查找" autocomplete="off">
+              <span id="transcriptSearchCount" role="status" aria-live="polite"></span>
+              <button id="transcriptSearchPrev" type="button" aria-label="上一个匹配" title="上一个（Shift + Enter）" disabled>↑</button>
+              <button id="transcriptSearchNext" type="button" aria-label="下一个匹配" title="下一个（Enter）" disabled>↓</button>
+            </div>
+            <p class="reading-hint" id="transcriptHelp" hidden>点击字幕跳转播放；选中文字可解释或存为笔记。中文 / 双语翻译使用 DeepSeek 额度。</p>
             <div id="transcriptList"></div>
           </div>
         </div>
@@ -132,7 +143,7 @@
         <div class="tab-panel" data-panel="overview">
           <!-- Chapters -->
           <div class="section">
-            <div class="section-title">章节摘要</div>
+            <div class="section-header"><div class="section-title">章节摘要</div><button id="exportOverviewBtn" class="enhance-btn" type="button" hidden>导出摘要</button></div>
             <ul class="chapter-list" id="chapterList">
               <li
                 class="chapter-item"
@@ -185,6 +196,10 @@
                 开始分析
               </button>
               <span id="commentSampleNote"></span>
+            </div>
+            <div class="transcript-actions comment-export-actions">
+              <button id="exportCommentsBtn" class="enhance-btn" type="button" hidden>导出评论</button>
+              <button id="exportCommentReportBtn" class="enhance-btn" type="button" hidden>导出分析</button>
             </div>
           </div>
 
@@ -239,7 +254,7 @@
               </div>
             </div>
             <p class="notes-intro" id="notesIntro">
-              把鼠标移到视频画面上，点击「保存片段」，保存当前位置附近的字幕。也可让视频获得焦点后按 N 键。
+              选中字幕后可直接存为笔记。也可将鼠标移到视频上点击「保存片段」，或让视频获得焦点后按 N 键，保存并润色附近字幕（使用 DeepSeek 额度）。
             </p>
             <div id="notesList"></div>
           </div>
@@ -257,6 +272,8 @@
     </button>
 
     <script src="settings.js"></script>
+    <script src="platforms.js"></script>
+    <script src="setup.js"></script>
     <script src="ui-copy.js"></script>
     <script src="sidepanel.js"></script>
   </body>

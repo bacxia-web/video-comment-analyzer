@@ -2,6 +2,29 @@ const deepseekInput = document.getElementById("deepseekKey");
 const youtubeInput = document.getElementById("youtubeKey");
 const supadataInput = document.getElementById("supadataKey");
 const saveStatus = document.getElementById("saveStatus");
+const xhsInputs = { maxComments: document.getElementById("xhsMaxComments"), maxRounds: document.getElementById("xhsMaxRounds"), idleRounds: document.getElementById("xhsIdleRounds") };
+const xhsSaveStatus = document.getElementById("xhsSaveStatus");
+async function loadXhsPreferences() {
+  const stored = await chrome.storage.local.get(YTD_SETTINGS.XHS_STORAGE_KEY);
+  const settings = YTD_SETTINGS.normalizeXhs(stored[YTD_SETTINGS.XHS_STORAGE_KEY]);
+  for (const [key, input] of Object.entries(xhsInputs)) input.value = settings[key];
+  if (location.hash === "#xiaohongshuSettings") document.getElementById("xiaohongshuSettings").open = true;
+}
+document.getElementById("xhsSettingsForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(Object.entries(xhsInputs).map(([key, input]) => [key, Number(input.value)]));
+  if (Object.entries(values).some(([key, value]) => !Number.isInteger(value) || value < YTD_SETTINGS.XHS_LIMITS[key].min || value > YTD_SETTINGS.XHS_LIMITS[key].max)) return;
+  xhsSaveStatus.textContent = "正在保存…";
+  try {
+    await chrome.storage.local.set({ [YTD_SETTINGS.XHS_STORAGE_KEY]: values });
+    xhsSaveStatus.className = "success";
+    xhsSaveStatus.textContent = "获取设置已保存，下次开始或继续获取时生效。";
+  } catch { xhsSaveStatus.className = "error"; xhsSaveStatus.textContent = "未能保存，请重试。"; }
+});
+document.getElementById("resetXhsSettings").onclick = () => {
+  for (const [key, input] of Object.entries(xhsInputs)) input.value = YTD_SETTINGS.XHS_LIMITS[key].default;
+  xhsSaveStatus.textContent = "已填入默认值，点击「保存获取设置」后生效。";
+};
 async function loadPreferences() {
   const settings = await PANORAMA_SETUP.read();
   deepseekInput.value = settings.aiApiKey;
@@ -37,6 +60,6 @@ document.getElementById("clearKeys").onclick = async () => {
   } catch { saveStatus.className = "error"; saveStatus.textContent = "清除失败，请重试。"; }
 };
 (async () => {
-  try { await loadPreferences(); }
+  try { await loadPreferences(); await loadXhsPreferences(); }
   catch { saveStatus.className = "error"; saveStatus.textContent = "未能读取已保存的设置。请重新打开此页面，不需要立即重新申请密钥。"; }
 })();

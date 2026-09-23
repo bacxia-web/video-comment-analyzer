@@ -4,7 +4,7 @@ var PANORAMA_COPY = (() => {
     NO_AI_KEY: "请先打开设置，填写 DeepSeek API Key，再回来开始分析。",
     INVALID_AI_KEY: "DeepSeek API Key 未通过验证。请打开设置，检查是否复制完整、是否仍然有效。",
     NO_YOUTUBE_KEY: "获取 YouTube 评论需要 YouTube Data API Key。请在设置中填写该可选项，再回来重试；其他功能不受影响。",
-    NO_SUPADATA_KEY: "字幕学习需要 Supadata API Key。请在设置的「Supadata 字幕服务（可选）」中填写；只做视频摘要可以返回分析面板。",
+    NO_SUPADATA_KEY: "未配置备用字幕服务。请先在 YouTube 打开「显示转录稿」后重试；也可在设置中填写可选的 Supadata API Key。",
     INVALID_SUPADATA_KEY: "Supadata API Key 未通过验证。请打开设置，检查是否复制完整、是否仍然有效。",
     COMMENTS_DISABLED: "这个视频已关闭评论，可以改为分析视频字幕。",
     YOUTUBE_QUOTA_EXCEEDED: "YouTube 评论获取额度已用完。请到 Google Cloud 查看配额，或等每日额度恢复后再试。",
